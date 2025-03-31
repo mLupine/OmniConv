@@ -3,7 +3,9 @@
         "error": {
             "cannot_connect": "Failed to connect",
             "invalid_auth": "Invalid authentication",
-            "unknown": "Unexpected error"
+            "unknown": "Unexpected error",
+            "model_not_supported": "This model is not supported",
+            "web_search_not_supported": "Web search is only supported with gpt-4o models"
         },
         "step": {
             "user": {
@@ -32,12 +34,73 @@
                     "attach_username": "Attach Username to Message",
                     "use_tools": "Use Tools",
                     "context_threshold": "Context Threshold",
-                    "context_truncate_strategy": "Context truncation strategy when exceeded threshold"
+                    "context_truncate_strategy": "Context truncation strategy when exceeded threshold",
+                    "recommended": "Use recommended model settings",
+                    "llm_hass_api": "Home Assistant API",
+                    "chat_model": "AI Model",
+                    "reasoning_effort": "Reasoning effort",
+                    "web_search": "Enable web search",
+                    "search_context_size": "Web search context size",
+                    "user_location": "Use approximate location for better search results"
                 }
             }
         }
     },
+    "reasoning_effort": {
+        "low": "Low",
+        "medium": "Medium",
+        "high": "High"
+    },
+    "search_context_size": {
+        "low": "Less context (faster)",
+        "medium": "Balanced",
+        "high": "More context (more detailed)"
+    },
     "services": {
+        "generate_image": {
+            "name": "Generate image",
+            "description": "Generate an image with DALL-E",
+            "fields": {
+                "config_entry": {
+                    "name": "Config Entry",
+                    "description": "The config entry to use for this service"
+                },
+                "prompt": {
+                    "name": "Prompt",
+                    "description": "Description of the image to generate"
+                },
+                "size": {
+                    "name": "Size",
+                    "description": "Size of the generated image"
+                },
+                "quality": {
+                    "name": "Quality",
+                    "description": "Quality of the generated image"
+                },
+                "style": {
+                    "name": "Style",
+                    "description": "Style of the generated image"
+                }
+            }
+        },
+        "generate_content": {
+            "name": "Generate content",
+            "description": "Send a prompt to the AI and get a response",
+            "fields": {
+                "config_entry": {
+                    "name": "Config Entry",
+                    "description": "The config entry to use for this service"
+                },
+                "prompt": {
+                    "name": "Prompt",
+                    "description": "The prompt to send to the AI"
+                },
+                "filenames": {
+                    "name": "Files",
+                    "description": "Files to include in the request (images and PDFs)"
+                }
+            }
+        },
         "query_image": {
             "name": "Query image",
             "description": "Take in images and answer questions about them",
@@ -54,7 +117,7 @@
                 "prompt": {
                     "name": "Prompt",
                     "description": "The text to ask about image",
-                    "example": "What’s in this image?"
+                    "example": "What's in this image?"
                 },
                 "images": {
                     "name": "Images",
@@ -68,5 +131,6 @@
                 }
             }
         }
-    }
+    },
+    "invalid_config_entry": "Invalid configuration entry '{config_entry}'"
 }
