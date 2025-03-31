@@ -118,6 +118,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     data = hass.data.setdefault(DOMAIN, {}).setdefault(entry.entry_id, {})
     data[CONF_API_KEY] = entry.data[CONF_API_KEY]
+    data[CONF_BASE_URL] = entry.data.get(CONF_BASE_URL)
+    data[CONF_API_VERSION] = entry.data.get(CONF_API_VERSION)
+    data[CONF_ORGANIZATION] = entry.data.get(CONF_ORGANIZATION)
+    data[CONF_SKIP_AUTHENTICATION] = entry.data.get(
+        CONF_SKIP_AUTHENTICATION, DEFAULT_SKIP_AUTHENTICATION
+    )
     data[DATA_AGENT] = agent
 
     conversation.async_set_agent(hass, entry, agent)
@@ -379,11 +385,15 @@ class OpenAIAgent(conversation.AbstractConversationAgent):
         choice: Choice = response.choices[0]
         message = choice.message
 
-        if choice.finish_reason == "function_call":
+        if choice.finish_reason == "function_call" or (
+            choice.finish_reason == "stop" and choice.message.function_call is not None
+        ):
             return await self.execute_function_call(
                 user_input, messages, message, exposed_entities, n_requests + 1
             )
-        if choice.finish_reason == "tool_calls":
+        if choice.finish_reason == "tool_calls" or (
+            choice.finish_reason == "stop" and choice.message.tool_calls is not None
+        ):
             return await self.execute_tool_calls(
                 user_input, messages, message, exposed_entities, n_requests + 1
             )

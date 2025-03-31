@@ -4,13 +4,7 @@ import mimetypes
 from pathlib import Path
 from urllib.parse import urlparse
 
-from openai import AsyncOpenAI
-from openai._exceptions import OpenAIError
-from openai.types.chat.chat_completion_content_part_image_param import (
-    ChatCompletionContentPartImageParam,
-)
 import voluptuous as vol
-
 from homeassistant.core import (
     HomeAssistant,
     ServiceCall,
@@ -18,10 +12,22 @@ from homeassistant.core import (
     SupportsResponse,
 )
 from homeassistant.exceptions import HomeAssistantError
-from homeassistant.helpers import config_validation as cv, selector
+from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers import selector
 from homeassistant.helpers.typing import ConfigType
+from openai import AsyncOpenAI
+from openai._exceptions import OpenAIError
+from openai.types.chat.chat_completion_content_part_image_param import (
+    ChatCompletionContentPartImageParam,
+)
 
-from .const import DOMAIN, SERVICE_QUERY_IMAGE
+from .const import (
+    CONF_API_VERSION,
+    CONF_ORGANIZATION,
+    DOMAIN,
+    SERVICE_QUERY_IMAGE,
+)
+from .helpers import is_azure
 
 QUERY_IMAGE_SCHEMA = vol.Schema(
     {
@@ -60,9 +66,30 @@ async def async_setup_services(hass: HomeAssistant, config: ConfigType) -> None:
             ]
             _LOGGER.info("Prompt for %s: %s", model, messages)
 
-            response = await AsyncOpenAI(
-                api_key=hass.data[DOMAIN][call.data["config_entry"]]["api_key"]
-            ).chat.completions.create(
+            base_url = hass.data[DOMAIN][call.data["config_entry"]]["base_url"]
+            if is_azure(base_url):
+                client = AsyncAzureOpenAI(
+                    api_key=hass.data[DOMAIN][call.data["config_entry"]]["api_key"],
+                    azure_endpoint=base_url,
+                    api_version=hass.data[DOMAIN][call.data["config_entry"]].get(
+                        CONF_API_VERSION
+                    ),
+                    organization=hass.data[DOMAIN][call.data["config_entry"]].get(
+                        CONF_ORGANIZATION
+                    ),
+                    # http_client=get_async_client(hass),
+                )
+            else:
+                client = AsyncOpenAI(
+                    api_key=hass.data[DOMAIN][call.data["config_entry"]]["api_key"],
+                    base_url=hass.data[DOMAIN][call.data["config_entry"]]["base_url"],
+                    organization=hass.data[DOMAIN][call.data["config_entry"]].get(
+                        CONF_ORGANIZATION
+                    ),
+                    # http_client=get_async_client(hass),
+                )
+
+            response = await client.chat.completions.create(
                 model=model,
                 messages=messages,
                 max_tokens=call.data["max_tokens"],
