@@ -4,18 +4,8 @@ from __future__ import annotations
 
 import base64
 from mimetypes import guess_type
-from pathlib import Path
 
 import openai
-from openai.types.responses import (
-    EasyInputMessageParam,
-    Response,
-    ResponseInputFileParam,
-    ResponseInputImageParam,
-    ResponseInputMessageContentListParam,
-    ResponseInputParam,
-    ResponseInputTextParam,
-)
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_API_KEY, Platform
@@ -30,7 +20,6 @@ from .const import (
     CONF_SKIP_AUTHENTICATION,
     DEFAULT_CONF_BASE_URL,
     DEFAULT_SKIP_AUTHENTICATION,
-    DOMAIN,
     LOGGER,
 )
 from .helpers import is_azure
@@ -56,16 +45,21 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     return True
 
 
-async def async_setup_entry(hass: HomeAssistant, entry: ExtendedOpenAIConfigEntry) -> bool:
+async def async_setup_entry(
+    hass: HomeAssistant, entry: ExtendedOpenAIConfigEntry
+) -> bool:
     """Set up Extended OpenAI Conversation from a config entry."""
     base_url = entry.data.get(CONF_BASE_URL, DEFAULT_CONF_BASE_URL)
-    skip_authentication = entry.data.get(CONF_SKIP_AUTHENTICATION, DEFAULT_SKIP_AUTHENTICATION)
+    skip_authentication = entry.data.get(
+        CONF_SKIP_AUTHENTICATION, DEFAULT_SKIP_AUTHENTICATION
+    )
     organization = entry.data.get(CONF_ORGANIZATION)
 
     # Configure client based on whether it's Azure OpenAI or standard OpenAI
     if is_azure(base_url):
         # For Azure OpenAI
         from openai import AzureOpenAI
+
         client = AzureOpenAI(
             api_key=entry.data[CONF_API_KEY],
             azure_endpoint=base_url,
@@ -92,7 +86,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ExtendedOpenAIConfigEntr
                 # Azure API doesn't have models.list, so we just verify we can connect
                 await client.with_options(timeout=10.0).deployments.list()
             else:
-                await hass.async_add_executor_job(client.with_options(timeout=10.0).models.list)
+                await hass.async_add_executor_job(
+                    client.with_options(timeout=10.0).models.list
+                )
         except openai.AuthenticationError as err:
             LOGGER.error("Invalid API key: %s", err)
             return False

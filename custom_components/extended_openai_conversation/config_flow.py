@@ -99,7 +99,9 @@ STEP_USER_DATA_SCHEMA = vol.Schema(
         vol.Optional(CONF_BASE_URL, default=DEFAULT_CONF_BASE_URL): str,
         vol.Optional(CONF_API_VERSION): str,
         vol.Optional(CONF_ORGANIZATION): str,
-        vol.Optional(CONF_SKIP_AUTHENTICATION, default=DEFAULT_SKIP_AUTHENTICATION): bool,
+        vol.Optional(
+            CONF_SKIP_AUTHENTICATION, default=DEFAULT_SKIP_AUTHENTICATION
+        ): bool,
     }
 )
 
@@ -110,7 +112,9 @@ DEFAULT_OPTIONS = types.MappingProxyType(
         CONF_PROMPT: DEFAULT_PROMPT,
         CONF_CHAT_MODEL: DEFAULT_CHAT_MODEL,
         CONF_MAX_TOKENS: DEFAULT_MAX_TOKENS,
-        CONF_MAX_FUNCTION_CALLS_PER_CONVERSATION: DEFAULT_MAX_FUNCTION_CALLS_PER_CONVERSATION,
+        CONF_MAX_FUNCTION_CALLS_PER_CONVERSATION: (
+            DEFAULT_MAX_FUNCTION_CALLS_PER_CONVERSATION
+        ),
         CONF_TOP_P: DEFAULT_TOP_P,
         CONF_TEMPERATURE: DEFAULT_TEMPERATURE,
         CONF_FUNCTIONS: DEFAULT_CONF_FUNCTIONS_STR,
@@ -159,10 +163,14 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     VERSION = 1
 
-    async def async_step_user(self, user_input: dict[str, Any] | None = None) -> FlowResult:
+    async def async_step_user(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
         """Handle the initial step."""
         if user_input is None:
-            return self.async_show_form(step_id="user", data_schema=STEP_USER_DATA_SCHEMA)
+            return self.async_show_form(
+                step_id="user", data_schema=STEP_USER_DATA_SCHEMA
+            )
 
         errors = {}
 
@@ -182,7 +190,9 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 options=RECOMMENDED_OPTIONS,
             )
 
-        return self.async_show_form(step_id="user", data_schema=STEP_USER_DATA_SCHEMA, errors=errors)
+        return self.async_show_form(
+            step_id="user", data_schema=STEP_USER_DATA_SCHEMA, errors=errors
+        )
 
     @staticmethod
     def async_get_options_flow(
@@ -198,9 +208,13 @@ class OptionsFlow(config_entries.OptionsFlow):
     def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
         """Initialize options flow."""
         self.config_entry = config_entry
-        self.last_rendered_recommended = config_entry.options.get(CONF_RECOMMENDED, False)
+        self.last_rendered_recommended = config_entry.options.get(
+            CONF_RECOMMENDED, False
+        )
 
-    async def async_step_init(self, user_input: dict[str, Any] | None = None) -> FlowResult:
+    async def async_step_init(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
         """Manage the options."""
         options: dict[str, Any] | MappingProxyType[str, Any] = self.config_entry.options
         errors: dict[str, str] = {}
@@ -213,12 +227,16 @@ class OptionsFlow(config_entries.OptionsFlow):
                 if user_input.get(CONF_CHAT_MODEL) in UNSUPPORTED_MODELS:
                     errors[CONF_CHAT_MODEL] = "model_not_supported"
 
-                if user_input.get(CONF_WEB_SEARCH) and user_input.get(CONF_WEB_SEARCH_USER_LOCATION):
+                if user_input.get(CONF_WEB_SEARCH) and user_input.get(
+                    CONF_WEB_SEARCH_USER_LOCATION
+                ):
                     user_input.update(await self.get_location_data())
 
                 if not errors:
                     # If functions are provided as a string, validate they're a proper YAML structure
-                    if CONF_FUNCTIONS in user_input and isinstance(user_input[CONF_FUNCTIONS], str):
+                    if CONF_FUNCTIONS in user_input and isinstance(
+                        user_input[CONF_FUNCTIONS], str
+                    ):
                         try:
                             yaml.safe_load(user_input[CONF_FUNCTIONS])
                         except yaml.YAMLError as err:
@@ -277,16 +295,21 @@ class OptionsFlow(config_entries.OptionsFlow):
                     input=[
                         {
                             "role": "system",
-                            "content": "Where are the following coordinates located: "
-                            f"({zone_home.attributes[ATTR_LATITUDE]},"
-                            f" {zone_home.attributes[ATTR_LONGITUDE]})?",
+                            "content": (
+                                "Where are the following coordinates located: "
+                                f"({zone_home.attributes[ATTR_LATITUDE]},"
+                                f" {zone_home.attributes[ATTR_LONGITUDE]})?"
+                            ),
                         }
                     ],
                     text={
                         "format": {
                             "type": "json_schema",
                             "name": "approximate_location",
-                            "description": "Approximate location data of the user " "for refined web search results",
+                            "description": (
+                                "Approximate location data of the user "
+                                "for refined web search results"
+                            ),
                             "schema": convert(location_schema),
                             "strict": False,
                         }
@@ -326,14 +349,20 @@ def openai_config_option_schema(
     schema: dict = {
         vol.Optional(
             CONF_PROMPT,
-            description={"suggested_value": options.get(CONF_PROMPT, llm.DEFAULT_INSTRUCTIONS_PROMPT)},
+            description={
+                "suggested_value": options.get(
+                    CONF_PROMPT, llm.DEFAULT_INSTRUCTIONS_PROMPT
+                )
+            },
         ): TemplateSelector(),
         vol.Optional(
             CONF_LLM_HASS_API,
             description={"suggested_value": options.get(CONF_LLM_HASS_API)},
             default="none",
         ): SelectSelector(SelectSelectorConfig(options=hass_apis)),
-        vol.Required(CONF_RECOMMENDED, default=options.get(CONF_RECOMMENDED, False)): bool,
+        vol.Required(
+            CONF_RECOMMENDED, default=options.get(CONF_RECOMMENDED, False)
+        ): bool,
     }
 
     if options.get(CONF_RECOMMENDED):
@@ -380,7 +409,9 @@ def openai_config_option_schema(
             ): bool,
             vol.Optional(
                 CONF_WEB_SEARCH_CONTEXT_SIZE,
-                description={"suggested_value": options.get(CONF_WEB_SEARCH_CONTEXT_SIZE)},
+                description={
+                    "suggested_value": options.get(CONF_WEB_SEARCH_CONTEXT_SIZE)
+                },
                 default=RECOMMENDED_WEB_SEARCH_CONTEXT_SIZE,
             ): SelectSelector(
                 SelectSelectorConfig(
@@ -391,13 +422,19 @@ def openai_config_option_schema(
             ),
             vol.Optional(
                 CONF_WEB_SEARCH_USER_LOCATION,
-                description={"suggested_value": options.get(CONF_WEB_SEARCH_USER_LOCATION)},
+                description={
+                    "suggested_value": options.get(CONF_WEB_SEARCH_USER_LOCATION)
+                },
                 default=RECOMMENDED_WEB_SEARCH_USER_LOCATION,
             ): bool,
             # Extended component settings
             vol.Optional(
                 CONF_MAX_FUNCTION_CALLS_PER_CONVERSATION,
-                description={"suggested_value": options.get(CONF_MAX_FUNCTION_CALLS_PER_CONVERSATION)},
+                description={
+                    "suggested_value": options.get(
+                        CONF_MAX_FUNCTION_CALLS_PER_CONVERSATION
+                    )
+                },
                 default=DEFAULT_MAX_FUNCTION_CALLS_PER_CONVERSATION,
             ): int,
             vol.Optional(
@@ -422,7 +459,9 @@ def openai_config_option_schema(
             ): int,
             vol.Optional(
                 CONF_CONTEXT_TRUNCATE_STRATEGY,
-                description={"suggested_value": options.get(CONF_CONTEXT_TRUNCATE_STRATEGY)},
+                description={
+                    "suggested_value": options.get(CONF_CONTEXT_TRUNCATE_STRATEGY)
+                },
                 default=DEFAULT_CONTEXT_TRUNCATE_STRATEGY,
             ): SelectSelector(
                 SelectSelectorConfig(

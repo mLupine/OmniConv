@@ -1,9 +1,12 @@
 {
   "domain": "extended_openai_conversation",
   "name": "Extended OpenAI Conversation",
-  "after_dependencies": ["assist_pipeline", "intent"],
+  "after_dependencies": [
+    "assist_pipeline",
+    "intent"
+  ],
   "codeowners": [
-    "@jekalmin"
+    "@mLupine"
   ],
   "config_flow": true,
   "dependencies": [
@@ -14,12 +17,12 @@
     "rest",
     "scrape"
   ],
-  "documentation": "https://github.com/jekalmin/extended_openai_conversation",
+  "documentation": "https://github.com/mLupine/extended_openai_conversation",
   "integration_type": "service",
   "iot_class": "cloud_polling",
-  "issue_tracker": "https://github.com/jekalmin/extended_openai_conversation/issues",
+  "issue_tracker": "https://github.com/mLupine/extended_openai_conversation/issues",
   "requirements": [
     "openai==1.68.2"
   ],
-  "version": "1.0.4"
+  "version": "2.0.0"
 }

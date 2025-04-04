@@ -1,10 +1,18 @@
 """Conversation support for Extended OpenAI."""
 
-from collections.abc import AsyncGenerator, Callable
 import json
+from collections.abc import AsyncGenerator, Callable
 from typing import Any, Literal
 
 import openai
+from homeassistant.components import assist_pipeline, conversation
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import CONF_LLM_HASS_API, MATCH_ALL
+from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import intent, llm
+from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from openai._streaming import AsyncStream
 from openai.types.responses import (
     EasyInputMessageParam,
@@ -28,14 +36,6 @@ from openai.types.responses import (
 from openai.types.responses.response_input_param import FunctionCallOutput
 from openai.types.responses.web_search_tool_param import UserLocation
 from voluptuous_openapi import convert
-
-from homeassistant.components import assist_pipeline, conversation
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CONF_LLM_HASS_API, MATCH_ALL
-from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import HomeAssistantError
-from homeassistant.helpers import device_registry as dr, intent, llm
-from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from . import ExtendedOpenAIConfigEntry
 from .const import (
@@ -61,7 +61,12 @@ from .const import (
     RECOMMENDED_TOP_P,
     RECOMMENDED_WEB_SEARCH_CONTEXT_SIZE,
 )
-from .helpers import is_azure
+from .helpers import (
+    is_azure,
+    log_openai_request,
+    log_openai_response,
+    log_openai_stream_event,
+)
 
 # Max number of back and forth with the LLM to generate a response
 MAX_TOOL_ITERATIONS = 10
@@ -131,7 +136,8 @@ async def _transform_stream(
 ) -> AsyncGenerator[conversation.AssistantContentDeltaDict]:
     """Transform an OpenAI delta stream into HA format."""
     async for event in result:
-        LOGGER.debug("Received event: %s", event)
+        # Log each stream event
+        log_openai_stream_event(event)
 
         if isinstance(event, ResponseOutputItemAddedEvent):
             if isinstance(event.item, ResponseOutputMessage):
@@ -337,8 +343,15 @@ class ExtendedOpenAIConversationEntity(
                     # Azure uses 'deployment' parameter instead of 'model'
                     model_args.pop("model")
                     model_args["deployment"] = deployment
-                    
+
+                # Log the request parameters
+                log_openai_request("responses.create", **model_args)
+
+                # Make the API call
                 result = await client.responses.create(**model_args)
+
+                # Log the response (stream events will be logged individually)
+                log_openai_response("responses.create", result)
             except openai.RateLimitError as err:
                 LOGGER.error("Rate limited by OpenAI: %s", err)
                 raise HomeAssistantError("Rate limited or insufficient funds") from err

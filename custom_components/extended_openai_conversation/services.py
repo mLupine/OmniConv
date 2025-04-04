@@ -21,8 +21,6 @@ from openai.types.responses import (
 )
 import voluptuous as vol
 
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CONF_API_KEY
 from homeassistant.core import (
     HomeAssistant,
     ServiceCall,
@@ -35,21 +33,17 @@ from homeassistant.exceptions import (
 )
 from homeassistant.helpers import config_validation as cv, selector
 from homeassistant.helpers.typing import ConfigType
-from homeassistant.helpers.httpx_client import get_async_client
 from openai._exceptions import OpenAIError
 
 from .const import (
-    CONF_API_VERSION,
     CONF_CHAT_MODEL,
     CONF_FILENAMES,
     CONF_MAX_TOKENS,
-    CONF_ORGANIZATION,
     CONF_PROMPT,
     CONF_REASONING_EFFORT,
     CONF_TEMPERATURE,
     CONF_TOP_P,
     DOMAIN,
-    LOGGER,
     RECOMMENDED_CHAT_MODEL,
     RECOMMENDED_MAX_TOKENS,
     RECOMMENDED_REASONING_EFFORT,
@@ -57,7 +51,7 @@ from .const import (
     RECOMMENDED_TOP_P,
     SERVICE_QUERY_IMAGE,
 )
-from .helpers import is_azure
+from .helpers import is_azure, log_openai_request, log_openai_response
 
 SERVICE_GENERATE_IMAGE = "generate_image"
 SERVICE_GENERATE_CONTENT = "generate_content"
@@ -137,17 +131,29 @@ async def async_setup_services(hass: HomeAssistant, config: ConfigType) -> None:
         try:
             if is_azure(entry.data.get("base_url", "")):
                 # Azure OpenAI uses different API for DALL-E
-                raise HomeAssistantError("DALL-E image generation not supported with Azure OpenAI")
-                
-            response: ImagesResponse = await client.images.generate(
-                model="dall-e-3",
-                prompt=call.data[CONF_PROMPT],
-                size=call.data["size"],
-                quality=call.data["quality"],
-                style=call.data["style"],
-                response_format="url",
-                n=1,
-            )
+                raise HomeAssistantError(
+                    "DALL-E image generation not supported with Azure OpenAI"
+                )
+
+            # Create request parameters
+            request_params = {
+                "model": "dall-e-3",
+                "prompt": call.data[CONF_PROMPT],
+                "size": call.data["size"],
+                "quality": call.data["quality"],
+                "style": call.data["style"],
+                "response_format": "url",
+                "n": 1,
+            }
+
+            # Log the request parameters
+            log_openai_request("images.generate", **request_params)
+
+            # Make the API call
+            response: ImagesResponse = await client.images.generate(**request_params)
+
+            # Log the response
+            log_openai_response("images.generate", response)
         except openai.OpenAIError as err:
             raise HomeAssistantError(f"Error generating image: {err}") from err
 
@@ -243,7 +249,14 @@ async def async_setup_services(hass: HomeAssistant, config: ConfigType) -> None:
                 model_args.pop("model")
                 model_args["deployment"] = deployment
 
+            # Log the request parameters
+            log_openai_request("responses.create", **model_args)
+
+            # Make the API call
             response: Response = await client.responses.create(**model_args)
+
+            # Log the response
+            log_openai_response("responses.create", response)
 
         except openai.OpenAIError as err:
             raise HomeAssistantError(f"Error generating content: {err}") from err
@@ -281,22 +294,31 @@ async def async_setup_services(hass: HomeAssistant, config: ConfigType) -> None:
 
             client = entry.runtime_data
 
+            # Prepare request parameters
             if is_azure(entry.data.get("base_url", "")):
                 # For Azure OpenAI, we need to use the deployment name
-                response = await client.chat.completions.create(
-                    deployment_id=model,  # Azure uses deployment_id instead of model
-                    messages=messages,
-                    max_tokens=call.data["max_tokens"],
-                )
+                request_params = {
+                    "deployment_id": model,  # Azure uses deployment_id instead of model
+                    "messages": messages,
+                    "max_tokens": call.data["max_tokens"],
+                }
             else:
-                response = await client.chat.completions.create(
-                    model=model,
-                    messages=messages,
-                    max_tokens=call.data["max_tokens"],
-                )
-                
+                request_params = {
+                    "model": model,
+                    "messages": messages,
+                    "max_tokens": call.data["max_tokens"],
+                }
+
+            # Log the request parameters
+            log_openai_request("chat.completions.create", **request_params)
+
+            # Make the API call
+            response = await client.chat.completions.create(**request_params)
+
+            # Log the response
+            log_openai_response("chat.completions.create", response)
+
             response_dict = response.model_dump()
-            _LOGGER.info("Response %s", response_dict)
         except OpenAIError as err:
             raise HomeAssistantError(f"Error querying image: {err}") from err
 

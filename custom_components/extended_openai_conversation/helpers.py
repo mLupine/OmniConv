@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from datetime import timedelta
 from functools import partial
+import json
 import logging
 import os
 import re
@@ -11,6 +12,8 @@ from urllib import parse
 
 from bs4 import BeautifulSoup
 from openai import AsyncAzureOpenAI, AsyncOpenAI
+from openai._streaming import AsyncStream
+from openai.types.responses import ResponseStreamEvent
 import voluptuous as vol
 import yaml
 
@@ -72,6 +75,88 @@ def is_azure(base_url: str):
     if base_url and re.search(AZURE_DOMAIN_PATTERN, base_url):
         return True
     return False
+
+
+def log_openai_request(endpoint: str, **kwargs) -> None:
+    """Log OpenAI API request details.
+
+    Args:
+        endpoint: The API endpoint being called (e.g., 'responses.create')
+        **kwargs: The request parameters
+    """
+    # Create a safe copy of the request parameters to log
+    safe_kwargs = {**kwargs}
+
+    # Redact any sensitive information
+    if "api_key" in safe_kwargs:
+        safe_kwargs["api_key"] = "***REDACTED***"
+
+    _LOGGER.info(
+        "OpenAI API request to %s: %s", endpoint, json.dumps(safe_kwargs, default=str)
+    )
+
+
+def log_openai_response(endpoint: str, response: Any) -> None:
+    """Log OpenAI API response.
+
+    Args:
+        endpoint: The API endpoint that was called
+        response: The response object
+    """
+    # For streaming responses, only log the type since we'll log events individually
+    if isinstance(response, AsyncStream):
+        _LOGGER.info("OpenAI API response from %s: AsyncStream (streaming)", endpoint)
+        return
+
+    # For regular responses, log the entire response (convert to dict for serialization)
+    try:
+        response_data = (
+            response.model_dump() if hasattr(response, "model_dump") else str(response)
+        )
+        _LOGGER.info(
+            "OpenAI API response from %s: %s",
+            endpoint,
+            json.dumps(response_data, default=str),
+        )
+    except Exception as err:
+        _LOGGER.warning(
+            "OpenAI API response from %s: %s (error serializing: %s)",
+            endpoint,
+            type(response),
+            err,
+        )
+
+
+def log_openai_stream_event(event: ResponseStreamEvent) -> None:
+    """Log a single OpenAI streaming response event.
+
+    Args:
+        event: The streaming event
+    """
+    event_type = type(event).__name__
+    is_completion_event = event_type in [
+        "ResponseCompletedEvent",
+        "ResponseOutputItemDoneEvent",
+    ]
+
+    try:
+        event_data = event.model_dump() if hasattr(event, "model_dump") else str(event)
+        if is_completion_event:
+            _LOGGER.info(
+                "OpenAI stream event %s: %s",
+                event_type,
+                json.dumps(event_data, default=str),
+            )
+        else:
+            _LOGGER.debug(
+                "OpenAI stream event %s: %s",
+                event_type,
+                json.dumps(event_data, default=str),
+            )
+    except Exception as err:
+        _LOGGER.warning(
+            "OpenAI stream event %s (error serializing: %s)", event_type, err
+        )
 
 
 def convert_to_template(
