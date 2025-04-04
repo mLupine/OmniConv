@@ -565,7 +565,12 @@ class TemplateFunctionExecutor(FunctionExecutor):
         user_input: conversation.ConversationInput,
         exposed_entities,
     ):
-        return function["value_template"].async_render(
+        value_template = function.get("value_template")
+        # Ensure value_template is a Template object, not a string
+        if isinstance(value_template, str):
+            value_template = Template(value_template, hass)
+
+        return value_template.async_render(
             arguments,
             parse_result=function.get("parse_result", False),
         )

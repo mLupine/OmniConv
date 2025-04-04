@@ -19,6 +19,7 @@ CONF_CHAT_MODEL = "chat_model"
 CONF_FILENAMES = "filenames"
 CONF_MAX_TOKENS = "max_tokens"
 CONF_PROMPT = "prompt"
+CONF_ENTITIES_PROMPT = "entities_prompt"
 CONF_REASONING_EFFORT = "reasoning_effort"
 CONF_RECOMMENDED = "recommended"
 CONF_TEMPERATURE = "temperature"
@@ -82,19 +83,22 @@ DEFAULT_PROMPT = """I want you to act as smart home manager of Home Assistant.
 I will provide information of smart home along with a question, you will truthfully make correction or answer using information provided in one sentence in everyday language.
 
 Current Time: {{now()}}
-
-Available Devices:
-```csv
-entity_id,name,state,aliases
-{% for entity in exposed_entities -%}
-{{ entity.entity_id }},{{ entity.name }},{{ entity.state }},{{entity.aliases | join('/')}}
-{% endfor -%}
 ```
 
 The current state of devices is provided in available devices.
 Use execute_services function only for requested action, not for current states.
 Do not execute service without user's confirmation.
 Do not restate or appreciate what user says, rather make a quick inquiry.
+"""
+
+DEFAULT_ENTITIES_PROMPT = """Available Devices:
+```csv
+entity_id,name,area_name,state,state_options,aliases
+{% for entity in exposed_entities -%}
+{{ entity.entity_id }},{{ entity.name }},{{area_name(entity.entity_id)}},{{ entity.state }},{{ states[entity.entity_id].attributes.options }},{{entity.aliases | join('/')}}
+{% endfor -%}
+```
+
 """
 
 # Default functions

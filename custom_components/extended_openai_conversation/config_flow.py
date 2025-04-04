@@ -44,6 +44,7 @@ from .const import (
     CONF_CHAT_MODEL,
     CONF_CONTEXT_THRESHOLD,
     CONF_CONTEXT_TRUNCATE_STRATEGY,
+    CONF_ENTITIES_PROMPT,
     CONF_FUNCTIONS,
     CONF_MAX_FUNCTION_CALLS_PER_CONVERSATION,
     CONF_MAX_TOKENS,
@@ -69,6 +70,7 @@ from .const import (
     DEFAULT_CONF_FUNCTIONS,
     DEFAULT_CONTEXT_THRESHOLD,
     DEFAULT_CONTEXT_TRUNCATE_STRATEGY,
+    DEFAULT_ENTITIES_PROMPT,
     DEFAULT_MAX_FUNCTION_CALLS_PER_CONVERSATION,
     DEFAULT_MAX_TOKENS,
     DEFAULT_NAME,
@@ -110,6 +112,7 @@ DEFAULT_CONF_FUNCTIONS_STR = yaml.dump(DEFAULT_CONF_FUNCTIONS, sort_keys=False)
 DEFAULT_OPTIONS = types.MappingProxyType(
     {
         CONF_PROMPT: DEFAULT_PROMPT,
+        CONF_ENTITIES_PROMPT: DEFAULT_ENTITIES_PROMPT,
         CONF_CHAT_MODEL: DEFAULT_CHAT_MODEL,
         CONF_MAX_TOKENS: DEFAULT_MAX_TOKENS,
         CONF_MAX_FUNCTION_CALLS_PER_CONVERSATION: (
@@ -129,6 +132,7 @@ RECOMMENDED_OPTIONS = {
     CONF_RECOMMENDED: True,
     CONF_LLM_HASS_API: llm.LLM_API_ASSIST,
     CONF_PROMPT: llm.DEFAULT_INSTRUCTIONS_PROMPT,
+    CONF_ENTITIES_PROMPT: DEFAULT_ENTITIES_PROMPT,
 }
 
 
@@ -251,6 +255,7 @@ class OptionsFlow(config_entries.OptionsFlow):
                 options = {
                     CONF_RECOMMENDED: user_input[CONF_RECOMMENDED],
                     CONF_PROMPT: user_input[CONF_PROMPT],
+                    CONF_ENTITIES_PROMPT: user_input[CONF_ENTITIES_PROMPT],
                     CONF_LLM_HASS_API: user_input[CONF_LLM_HASS_API],
                 }
 
@@ -352,6 +357,14 @@ def openai_config_option_schema(
             description={
                 "suggested_value": options.get(
                     CONF_PROMPT, llm.DEFAULT_INSTRUCTIONS_PROMPT
+                )
+            },
+        ): TemplateSelector(),
+        vol.Optional(
+            CONF_ENTITIES_PROMPT,
+            description={
+                "suggested_value": options.get(
+                    CONF_ENTITIES_PROMPT, DEFAULT_ENTITIES_PROMPT
                 )
             },
         ): TemplateSelector(),

@@ -6,7 +6,6 @@ import base64
 from mimetypes import guess_type
 
 import openai
-
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_API_KEY, Platform
 from homeassistant.core import HomeAssistant
@@ -14,6 +13,7 @@ from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers.httpx_client import get_async_client
 from homeassistant.helpers.typing import ConfigType
 
+from .api import async_setup_api
 from .const import (
     CONF_BASE_URL,
     CONF_ORGANIZATION,
@@ -54,6 +54,8 @@ async def async_setup_entry(
         CONF_SKIP_AUTHENTICATION, DEFAULT_SKIP_AUTHENTICATION
     )
     organization = entry.data.get(CONF_ORGANIZATION)
+
+    _ = await async_setup_api(hass, entry)
 
     # Configure client based on whether it's Azure OpenAI or standard OpenAI
     if is_azure(base_url):
