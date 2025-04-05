@@ -129,7 +129,7 @@ async def async_setup_services(hass: HomeAssistant, config: ConfigType) -> None:
         client = entry.runtime_data
 
         try:
-            if is_azure(entry.data.get("base_url", "")):
+            if is_azure(entry.options.get("base_url", "")):
                 # Azure OpenAI uses different API for DALL-E
                 raise HomeAssistantError(
                     "DALL-E image generation not supported with Azure OpenAI"
@@ -242,7 +242,7 @@ async def async_setup_services(hass: HomeAssistant, config: ConfigType) -> None:
                 }
 
             # Handle Azure OpenAI if applicable
-            if is_azure(entry.data.get("base_url", "")):
+            if is_azure(entry.options.get("base_url", "")):
                 # Azure OpenAI uses deployments instead of model names
                 deployment = model
                 # Azure uses 'deployment' parameter instead of 'model'
@@ -295,7 +295,7 @@ async def async_setup_services(hass: HomeAssistant, config: ConfigType) -> None:
             client = entry.runtime_data
 
             # Prepare request parameters
-            if is_azure(entry.data.get("base_url", "")):
+            if is_azure(entry.options.get("base_url", "")):
                 # For Azure OpenAI, we need to use the deployment name
                 request_params = {
                     "deployment_id": model,  # Azure uses deployment_id instead of model

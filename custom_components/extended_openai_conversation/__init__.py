@@ -49,11 +49,11 @@ async def async_setup_entry(
     hass: HomeAssistant, entry: ExtendedOpenAIConfigEntry
 ) -> bool:
     """Set up Extended OpenAI Conversation from a config entry."""
-    base_url = entry.data.get(CONF_BASE_URL, DEFAULT_CONF_BASE_URL)
-    skip_authentication = entry.data.get(
+    base_url = entry.options.get(CONF_BASE_URL, DEFAULT_CONF_BASE_URL)
+    skip_authentication = entry.options.get(
         CONF_SKIP_AUTHENTICATION, DEFAULT_SKIP_AUTHENTICATION
     )
-    organization = entry.data.get(CONF_ORGANIZATION)
+    organization = entry.options.get(CONF_ORGANIZATION)
 
     _ = await async_setup_api(hass, entry)
 
@@ -63,16 +63,16 @@ async def async_setup_entry(
         from openai import AzureOpenAI
 
         client = AzureOpenAI(
-            api_key=entry.data[CONF_API_KEY],
+            api_key=entry.options[CONF_API_KEY],
             azure_endpoint=base_url,
-            api_version=entry.data.get("api_version", "2023-12-01-preview"),
+            api_version=entry.options.get("api_version", "2023-12-01-preview"),
             organization=organization,
             http_client=get_async_client(hass),
         )
     else:
         # For standard OpenAI
         client = openai.AsyncOpenAI(
-            api_key=entry.data[CONF_API_KEY],
+            api_key=entry.options[CONF_API_KEY],
             base_url=base_url,
             organization=organization,
             http_client=get_async_client(hass),

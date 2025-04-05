@@ -505,7 +505,7 @@ class ExtendedOpenAIConversationEntity(
 
             try:
                 # Handle Azure OpenAI if applicable
-                if is_azure(self.entry.data.get("base_url", "")):
+                if is_azure(self.entry.options.get("base_url", "")):
                     # Azure OpenAI uses deployments instead of model names
                     # So we need to adjust the model parameter
                     deployment = model

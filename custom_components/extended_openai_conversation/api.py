@@ -13,7 +13,7 @@ from homeassistant.helpers import llm
 from homeassistant.helpers.llm import AssistAPI, LLMContext, Tool
 from homeassistant.helpers.template import Template
 
-from .const import CONF_ENTITIES_PROMPT, DEFAULT_ENTITIES_PROMPT, DOMAIN
+from .const import CONF_ENTITIES_PROMPT, DEFAULT_ENTITIES_PROMPT
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -33,13 +33,25 @@ class FlexAssistAPI(AssistAPI):
         """Init the class."""
         super(AssistAPI, self).__init__(
             hass=hass,
-            id=(f"{LLM_API_FLEX_ASSIST}_{id_suffix}" if id_suffix else LLM_API_FLEX_ASSIST),
-            name=(f"{LLM_API_FLEX_ASSIST_NAME} — {name_suffix}" if name_suffix else LLM_API_FLEX_ASSIST_NAME),
+            id=(
+                f"{LLM_API_FLEX_ASSIST}_{id_suffix}"
+                if id_suffix
+                else LLM_API_FLEX_ASSIST
+            ),
+            name=(
+                f"{LLM_API_FLEX_ASSIST_NAME} — {name_suffix}"
+                if name_suffix
+                else LLM_API_FLEX_ASSIST_NAME
+            ),
         )
-        self.cached_slugify = cache(partial(unicode_slug.slugify, separator="_", lowercase=False))
+        self.cached_slugify = cache(
+            partial(unicode_slug.slugify, separator="_", lowercase=False)
+        )
 
     @callback
-    def _async_get_exposed_entities_prompt(self, llm_context: LLMContext, exposed_entities: dict | None) -> list[str]:
+    def _async_get_exposed_entities_prompt(
+        self, llm_context: LLMContext, exposed_entities: dict | None
+    ) -> list[str]:
         """Return the prompt for the API for exposed entities."""
         if not exposed_entities or not exposed_entities.get("entities"):
             return []
@@ -49,9 +61,13 @@ class FlexAssistAPI(AssistAPI):
         if llm_context.assistant:
             entity = er.async_get(self.hass).async_get(llm_context.assistant)
             if entity and entity.config_entry_id:
-                config_entry = self.hass.config_entries.async_get_entry(entity.config_entry_id)
+                config_entry = self.hass.config_entries.async_get_entry(
+                    entity.config_entry_id
+                )
                 if config_entry:
-                    entities_prompt_template = config_entry.options.get(CONF_ENTITIES_PROMPT, DEFAULT_ENTITIES_PROMPT)
+                    entities_prompt_template = config_entry.options.get(
+                        CONF_ENTITIES_PROMPT, DEFAULT_ENTITIES_PROMPT
+                    )
 
         # Define area_name function for template
         def get_area_name(entity_id):
@@ -78,7 +94,7 @@ class FlexAssistAPI(AssistAPI):
             rendered_prompt = template_obj.async_render(
                 template_vars,
                 parse_result=False,
-                strict=False  # Prevent UndefinedError for missing variables
+                strict=False,  # Prevent UndefinedError for missing variables
             )
         except Exception as err:
             # Fall back to unrendered template if rendering fails
@@ -92,19 +108,29 @@ class FlexAssistAPI(AssistAPI):
         """Return the prompt for the API."""
 
         prompt = []
-        if not llm_context.device_id or not async_device_supports_timers(self.hass, llm_context.device_id):
+        if not llm_context.device_id or not async_device_supports_timers(
+            self.hass, llm_context.device_id
+        ):
             prompt.append("This device is not able to start timers.")
 
         return prompt
 
     @callback
-    def _async_get_tools(self, llm_context: LLMContext, exposed_entities: dict | None) -> list[Tool]:
+    def _async_get_tools(
+        self, llm_context: LLMContext, exposed_entities: dict | None
+    ) -> list[Tool]:
         """Return a list of LLM tools."""
 
         tools = super()._async_get_tools(llm_context, exposed_entities)
-        return [tool for tool in tools if not isinstance(tool, Tool) and not tool.name == "get_home_state"]
+        return [
+            tool
+            for tool in tools
+            if not isinstance(tool, Tool) and not tool.name == "get_home_state"
+        ]
 
 
 async def async_setup_api(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    unreg = llm.async_register_api(hass, FlexAssistAPI(hass, entry.entry_id, entry.title))
+    unreg = llm.async_register_api(
+        hass, FlexAssistAPI(hass, entry.entry_id, entry.title)
+    )
     entry.async_on_unload(unreg)
