@@ -4,7 +4,7 @@ generate_image:
       required: true
       selector:
         config_entry:
-          integration: extended_openai_conversation
+          integration: omniconv
     prompt:
       required: true
       selector:
@@ -45,7 +45,7 @@ generate_content:
       required: true
       selector:
         config_entry:
-          integration: extended_openai_conversation
+          integration: omniconv
     prompt:
       required: true
       selector:
@@ -66,7 +66,7 @@ query_image:
       required: true
       selector:
         config_entry:
-          integration: extended_openai_conversation
+          integration: omniconv
     model:
       example: gpt-4-vision-preview
       selector:

@@ -1,5 +1,5 @@
 ## Objective
-<img width="300" src="https://github.com/jekalmin/extended_openai_conversation/assets/2917984/d5c9e0db-8d7c-4a7a-bc46-b043627ffec6">
+<img width="300" src="https://github.com/mLupine/OmniConv/assets/2917984/d5c9e0db-8d7c-4a7a-bc46-b043627ffec6">
 
 ## Prompt
 Add following text in your prompt
@@ -94,7 +94,7 @@ script:
             youtube://www.youtube.com/watch?v={{content_id}}
           {% elif kind == 'channel' %}
             youtube://www.youtube.com/channel/{{content_id}}
-          {% else %} 
+          {% else %}
             youtube://www.youtube.com/playlist?list={{content_id}}
           {% endif %}
       target:

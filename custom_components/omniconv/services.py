@@ -1,4 +1,4 @@
-"""Services for the Extended OpenAI Conversation integration."""
+"""Services for the OmniConv integration."""
 
 from __future__ import annotations
 
@@ -112,7 +112,7 @@ def encode_image(image_path):
 
 
 async def async_setup_services(hass: HomeAssistant, config: ConfigType) -> None:
-    """Set up services for the Extended OpenAI Conversation component."""
+    """Set up services for the OmniConv component."""
 
     async def render_image(call: ServiceCall) -> ServiceResponse:
         """Render an image with dall-e."""

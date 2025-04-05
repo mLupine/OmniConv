@@ -31,7 +31,7 @@ of allowlist_external_dirs to /media or your choosen directory.
     sequence:
       - type: script
         sequence:
-          - service: extended_openai_conversation.query_image
+          - service: omniconv.query_image
             data:
               model: gpt-4-vision-preview
               prompt: What's in this image?
@@ -97,7 +97,7 @@ of allowlist_external_dirs to /media or your choosen directory.
               entity_id: "{{entity_id}}"
             data:
               filename: '{{filename}}'
-          - service: extended_openai_conversation.query_image
+          - service: omniconv.query_image
             data:
               model: gpt-4-vision-preview
               prompt: What's in this image?

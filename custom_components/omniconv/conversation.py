@@ -1,4 +1,4 @@
-"""Conversation support for Extended OpenAI."""
+"""Conversation support for OmniConv."""
 
 import json
 from collections.abc import AsyncGenerator, Callable
@@ -40,7 +40,7 @@ from openai.types.responses.response_input_param import FunctionCallOutput
 from openai.types.responses.web_search_tool_param import UserLocation
 from voluptuous_openapi import convert
 
-from . import ExtendedOpenAIConfigEntry
+from . import OmniConvConfigEntry
 from .const import (
     CONF_CHAT_MODEL,
     CONF_FUNCTIONS,
@@ -168,11 +168,11 @@ class CustomFunctionTool(llm.Tool):
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    config_entry: ExtendedOpenAIConfigEntry,
+    config_entry: OmniConvConfigEntry,
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up conversation entities."""
-    agent = ExtendedOpenAIConversationEntity(config_entry)
+    agent = OmniConvEntity(config_entry)
     async_add_entities([agent])
 
 
@@ -316,15 +316,15 @@ async def _transform_stream(
             raise HomeAssistantError(f"OpenAI response error: {event.message}")
 
 
-class ExtendedOpenAIConversationEntity(
+class OmniConvEntity(
     conversation.ConversationEntity, conversation.AbstractConversationAgent
 ):
-    """Extended OpenAI conversation agent."""
+    """OmniConv conversation agent."""
 
     _attr_has_entity_name = True
     _attr_name = None
 
-    def __init__(self, entry: ExtendedOpenAIConfigEntry) -> None:
+    def __init__(self, entry: OmniConvConfigEntry) -> None:
         """Initialize the agent."""
         self.entry = entry
         self._attr_unique_id = entry.entry_id

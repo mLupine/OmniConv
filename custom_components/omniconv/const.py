@@ -1,10 +1,10 @@
-"""Constants for the Extended OpenAI Conversation integration."""
+"""Constants for the OmniConv integration."""
 
 import logging
 
-DOMAIN = "extended_openai_conversation"
+DOMAIN = "omniconv"
 LOGGER: logging.Logger = logging.getLogger(__package__)
-DEFAULT_NAME = "Extended OpenAI Conversation"
+DEFAULT_NAME = "OmniConv"
 
 # Connection related config
 CONF_ORGANIZATION = "organization"
@@ -72,8 +72,8 @@ CONTEXT_TRUNCATE_STRATEGIES = [{"key": "clear", "label": "Clear All Messages"}]
 DEFAULT_CONTEXT_TRUNCATE_STRATEGY = CONTEXT_TRUNCATE_STRATEGIES[0]["key"]
 
 # Events
-EVENT_AUTOMATION_REGISTERED = "automation_registered_via_extended_openai_conversation"
-EVENT_CONVERSATION_FINISHED = "extended_openai_conversation.conversation.finished"
+EVENT_AUTOMATION_REGISTERED = "automation_registered_via_omniconv"
+EVENT_CONVERSATION_FINISHED = "omniconv.conversation.finished"
 
 # Services
 SERVICE_QUERY_IMAGE = "query_image"

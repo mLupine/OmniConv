@@ -1,4 +1,4 @@
-"""Config flow for Extended OpenAI Conversation integration."""
+"""Config flow for OmniConv integration."""
 
 from __future__ import annotations
 
@@ -159,7 +159,7 @@ async def validate_options(hass: HomeAssistant, data: dict[str, Any]) -> None:
 
 
 class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
-    """Handle a config flow for Extended OpenAI Conversation."""
+    """Handle a config flow for OmniConv."""
 
     VERSION = 1
 

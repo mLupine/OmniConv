@@ -1,4 +1,4 @@
-"""The Extended OpenAI Conversation integration."""
+"""The OmniConv integration."""
 
 from __future__ import annotations
 
@@ -27,7 +27,7 @@ from .services import async_setup_services
 
 PLATFORMS = (Platform.CONVERSATION,)
 
-type ExtendedOpenAIConfigEntry = ConfigEntry[openai.AsyncClient]
+type OmniConvConfigEntry = ConfigEntry[openai.AsyncClient]
 
 
 def encode_file(file_path: str) -> tuple[str, str]:
@@ -40,15 +40,13 @@ def encode_file(file_path: str) -> tuple[str, str]:
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
-    """Set up Extended OpenAI Conversation."""
+    """Set up OmniConv."""
     await async_setup_services(hass, config)
     return True
 
 
-async def async_setup_entry(
-    hass: HomeAssistant, entry: ExtendedOpenAIConfigEntry
-) -> bool:
-    """Set up Extended OpenAI Conversation from a config entry."""
+async def async_setup_entry(hass: HomeAssistant, entry: OmniConvConfigEntry) -> bool:
+    """Set up OmniConv from a config entry."""
     base_url = entry.options.get(CONF_BASE_URL, DEFAULT_CONF_BASE_URL)
     skip_authentication = entry.options.get(
         CONF_SKIP_AUTHENTICATION, DEFAULT_SKIP_AUTHENTICATION

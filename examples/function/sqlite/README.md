@@ -101,8 +101,8 @@
 ### 2. Defined SQL manually
 
 #### 2-1. get_state_at_time
-<img width="300" src="https://github.com/jekalmin/extended_openai_conversation/assets/2917984/19fac845-5cee-4d84-98b5-1e18994bb2ee">
-<img width="300" src="https://github.com/jekalmin/extended_openai_conversation/assets/2917984/af8a26d1-0525-4411-b323-29be92d8f368">
+<img width="300" src="https://github.com/mLupine/OmniConv/assets/2917984/19fac845-5cee-4d84-98b5-1e18994bb2ee">
+<img width="300" src="https://github.com/mLupine/OmniConv/assets/2917984/af8a26d1-0525-4411-b323-29be92d8f368">
 
 ```yaml
 - spec:
@@ -142,7 +142,7 @@
 
 
 #### 2-2. get_states_between
-<img width="300" src="https://github.com/jekalmin/extended_openai_conversation/assets/2917984/d504b372-460b-45b8-8705-027548bc0c52">
+<img width="300" src="https://github.com/mLupine/OmniConv/assets/2917984/d504b372-460b-45b8-8705-027548bc0c52">
 
 ```yaml
 - spec:
@@ -231,8 +231,8 @@
 ```
 
 #### 2-3. get_total_time_of_entity_state
-<img width="300" src="https://github.com/jekalmin/extended_openai_conversation/assets/2917984/42eab8bc-3326-4d70-b065-a4788060a49b">
-<img width="300" src="https://github.com/jekalmin/extended_openai_conversation/assets/2917984/1e01fce1-7891-4d87-bfea-cd52c5c73592">
+<img width="300" src="https://github.com/mLupine/OmniConv/assets/2917984/42eab8bc-3326-4d70-b065-a4788060a49b">
+<img width="300" src="https://github.com/mLupine/OmniConv/assets/2917984/1e01fce1-7891-4d87-bfea-cd52c5c73592">
 
 ```yaml
 - spec:
@@ -286,9 +286,9 @@
                 state
               FROM lead_data
               WHERE last_updated = (SELECT MIN(last_updated) FROM lead_data)
-    
+
               UNION ALL
-              
+
               SELECT last_updated AS prev_last_updated, state AS prev_state, min(lead_last_updated, strftime('%Y-%m-%d %H:%M:%S', 'now', 'localtime')) AS last_updated, lead_state AS state
               FROM lead_data
             )
@@ -301,12 +301,12 @@
         value_template: >-
           {%- if result and result[0] and result[0].total_time_in_sec -%}
             {%- set duration = result[0].total_time_in_sec | int -%}
-            
+
             {%- set days = (duration // 86400) | int -%}
             {%- set hours = ((duration % 86400) // 3600) | int -%}
             {%- set minutes = ((duration % 3600) // 60) | int -%}
             {%- set remaining_seconds = (duration % 60) | int -%}
-            
+
             {{ "{0}d ".format(days) if days > 0 else "" }}{{ "{0}h ".format(hours) if hours > 0 else "" }}{{ "{0}m ".format(minutes) if minutes > 0 else "" }}{{ "{0}s".format(remaining_seconds) if remaining_seconds > 0 else "" }}
           {%- else -%}
             unkown

@@ -1,4 +1,4 @@
-"""The exceptions used by Extended OpenAI Conversation."""
+"""The exceptions used by OmniConv."""
 
 from homeassistant.exceptions import HomeAssistantError
 

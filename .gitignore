@@ -1,0 +1,16 @@
+ha-core/
+CLAUDE*
+merge-plan/
+*.pyc
+*.pyo
+__pycache__/
+dist/Go
+build/
+tmp/
+*.egg-info
+*.egg
+.idea/
+.vscode/
+pyproject.toml
+*.lock
+_ext/
