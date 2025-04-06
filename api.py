@@ -18,7 +18,7 @@ from .const import CONF_ENTITIES_PROMPT, DEFAULT_ENTITIES_PROMPT
 _LOGGER = logging.getLogger(__name__)
 
 LLM_API_FLEX_ASSIST = "flex_assist"
-LLM_API_FLEX_ASSIST_NAME = "Flexible Assist"
+LLM_API_FLEX_ASSIST_NAME = "OmniConv Assist API"
 
 
 class FlexAssistAPI(AssistAPI):
