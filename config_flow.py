@@ -209,7 +209,13 @@ class OptionsFlow(config_entries.OptionsFlow):
                     errors["base"] = "unknown"
 
                 if user_input.get(CONF_WEB_SEARCH) and user_input.get(CONF_WEB_SEARCH_USER_LOCATION):
-                    user_input.update(await self.get_location_data())
+                    user_input.update(
+                        await self.get_location_data(
+                            api_key=user_input.get(CONF_API_KEY),
+                            base_url=user_input.get(CONF_BASE_URL),
+                            organization=user_input.get(CONF_ORGANIZATION),
+                        )
+                    )
 
                 if not errors:
                     # If functions are provided as a string, validate they're a proper YAML structure
@@ -240,21 +246,24 @@ class OptionsFlow(config_entries.OptionsFlow):
             errors=errors,
         )
 
-    async def get_location_data(self) -> dict[str, str]:
+    async def get_location_data(
+        self,
+        api_key: str | None,
+        base_url: str | None,
+        organization: str | None,
+    ) -> dict[str, str]:
         """Get approximate location data of the user."""
         location_data: dict[str, str] = {}
         zone_home = self.hass.states.get(ENTITY_ID_HOME)
         if zone_home is not None:
-            # Configure client based on whether it's Azure OpenAI or standard OpenAI
-            base_url = self.config_entry.options.get(CONF_BASE_URL, DEFAULT_CONF_BASE_URL)
-            if is_azure(base_url):
-                # Skip location detection for Azure OpenAI
+            effective_base_url = base_url or DEFAULT_CONF_BASE_URL
+            if is_azure(effective_base_url):
                 _LOGGER.debug("Skipping location detection with Azure OpenAI")
-            else:
+            elif api_key:
                 client = openai.AsyncOpenAI(
-                    api_key=self.config_entry.options[CONF_API_KEY],
-                    base_url=base_url,
-                    organization=self.config_entry.options.get(CONF_ORGANIZATION),
+                    api_key=api_key,
+                    base_url=(effective_base_url if effective_base_url != DEFAULT_CONF_BASE_URL else None),
+                    organization=organization,
                     http_client=get_async_client(self.hass),
                 )
                 location_schema = vol.Schema(
