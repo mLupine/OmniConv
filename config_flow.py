@@ -99,7 +99,7 @@ DEFAULT_OPTIONS = types.MappingProxyType(
         CONF_ENTITIES_PROMPT: DEFAULT_ENTITIES_PROMPT,
         CONF_CHAT_MODEL: DEFAULT_CHAT_MODEL,
         CONF_MAX_TOKENS: DEFAULT_MAX_TOKENS,
-        CONF_MAX_FUNCTION_CALLS_PER_CONVERSATION: (DEFAULT_MAX_FUNCTION_CALLS_PER_CONVERSATION),
+        CONF_MAX_FUNCTION_CALLS_PER_CONVERSATION: DEFAULT_MAX_FUNCTION_CALLS_PER_CONVERSATION,
         CONF_TOP_P: DEFAULT_TOP_P,
         CONF_TEMPERATURE: DEFAULT_TEMPERATURE,
         CONF_FUNCTIONS: DEFAULT_CONF_FUNCTIONS_STR,
@@ -122,7 +122,6 @@ async def validate_options(hass: HomeAssistant, data: dict[str, Any]) -> None:
     """
     skip_authentication = data.get(CONF_SKIP_AUTHENTICATION, DEFAULT_SKIP_AUTHENTICATION)
 
-    # Only validate if authentication is not skipped and API key is provided
     if not skip_authentication and CONF_API_KEY in data:
         api_key = data[CONF_API_KEY]
         base_url = data.get(CONF_BASE_URL)
@@ -154,10 +153,8 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is None:
             return self.async_show_form(step_id="user", data_schema=STEP_USER_DATA_SCHEMA)
 
-        # Create default options with API configuration
         options = dict(DEFAULT_INTEGRATION_OPTIONS)
 
-        # Initialize this entry with just the name in data
         data = {CONF_NAME: user_input.get(CONF_NAME, DEFAULT_NAME)}
 
         return self.async_create_entry(
@@ -187,7 +184,6 @@ class OptionsFlow(config_entries.OptionsFlow):
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            # Check if CONF_SKIP_AUTHENTICATION has changed, which requires re-rendering
             current_skip_auth = options.get(CONF_SKIP_AUTHENTICATION, DEFAULT_SKIP_AUTHENTICATION)
             new_skip_auth = user_input.get(CONF_SKIP_AUTHENTICATION, DEFAULT_SKIP_AUTHENTICATION)
             rerender_form = current_skip_auth != new_skip_auth
@@ -196,7 +192,6 @@ class OptionsFlow(config_entries.OptionsFlow):
                 if user_input.get(CONF_CHAT_MODEL) in UNSUPPORTED_MODELS:
                     errors[CONF_CHAT_MODEL] = "model_not_supported"
 
-                # Validate API configuration if provided
                 try:
                     if CONF_API_KEY in user_input:
                         await validate_options(self.hass, user_input)
@@ -228,14 +223,11 @@ class OptionsFlow(config_entries.OptionsFlow):
                 if not errors:
                     return self.async_create_entry(title="", data=user_input)
             else:
-                # Re-render the options with the updated settings
-                # Create a new options dictionary for rendering
                 options = {
                     CONF_PROMPT: user_input[CONF_PROMPT],
                     CONF_ENTITIES_PROMPT: user_input[CONF_ENTITIES_PROMPT],
                 }
 
-                # Include the skip_authentication value if it exists
                 if CONF_SKIP_AUTHENTICATION in user_input:
                     options[CONF_SKIP_AUTHENTICATION] = user_input[CONF_SKIP_AUTHENTICATION]
 
@@ -294,7 +286,7 @@ class OptionsFlow(config_entries.OptionsFlow):
                         "format": {
                             "type": "json_schema",
                             "name": "approximate_location",
-                            "description": ("Approximate location data of the user " "for refined web search results"),
+                            "description": "Approximate location data of the user " "for refined web search results",
                             "schema": convert(location_schema),
                             "strict": False,
                         }
@@ -323,7 +315,6 @@ def openai_config_option_schema(
         vol.Optional(CONF_SKIP_AUTHENTICATION, default=DEFAULT_SKIP_AUTHENTICATION): bool,
     }
 
-    # API key is only required if skip_authentication is False
     api_key_options = dict(
         description={"suggested_value": options.get(CONF_API_KEY)},
     )
@@ -332,7 +323,6 @@ def openai_config_option_schema(
     else:
         schema[vol.Optional(CONF_API_KEY, **api_key_options)] = str
 
-    # Add the rest of the authentication fields
     schema.update(
         {
             vol.Optional(
@@ -359,7 +349,6 @@ def openai_config_option_schema(
         }
     )
 
-    # Add all the model settings and extended options
     schema.update(
         {
             vol.Optional(

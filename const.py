@@ -1,3 +1,4 @@
+# ruff: noqa: E501
 """Constants for the OmniConv integration."""
 
 import logging
@@ -93,7 +94,7 @@ DEFAULT_CONF_FUNCTIONS = [
     {
         "spec": {
             "name": "execute_services",
-            "description": ("Use this function to execute service of devices in Home Assistant."),
+            "description": "Use this function to execute service of devices in Home Assistant.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -112,7 +113,7 @@ DEFAULT_CONF_FUNCTIONS = [
                                 },
                                 "service_data": {
                                     "type": "object",
-                                    "description": ("The service data object to indicate what to" " control."),
+                                    "description": "The service data object to indicate what to" " control.",
                                     "properties": {
                                         "entity_id": {
                                             "type": "string",

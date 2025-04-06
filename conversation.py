@@ -86,12 +86,9 @@ class CustomFunctionTool(llm.Tool):
         self.name = function_spec["name"]
         self.description = function_spec.get("description", f"Execute {self.name} function")
 
-        # Create an empty vol.Schema for compatibility with the voluptuous_openapi.convert function
         self.parameters = vol.Schema({})
 
-        # Store the function implementation details for execution
         self.function_impl = function_impl
-        # Store the full spec for reference
         self.function_spec = function_spec
 
     async def async_call(
@@ -106,10 +103,8 @@ class CustomFunctionTool(llm.Tool):
         from .helpers import get_function_executor
 
         try:
-            # Get the appropriate function executor
             function_executor = get_function_executor(self.function_impl["type"])
 
-            # Get exposed entities
             exposed_entities = []
             states = [
                 state
@@ -132,7 +127,6 @@ class CustomFunctionTool(llm.Tool):
                     }
                 )
 
-            # Convert LLMContext to ConversationInput for the function executor
             from homeassistant.components.conversation import ConversationInput
 
             user_input = ConversationInput(
@@ -144,7 +138,6 @@ class CustomFunctionTool(llm.Tool):
                 agent_id=llm_context.assistant,  # Use the assistant name as agent_id
             )
 
-            # Execute the function
             result = await function_executor.execute(
                 hass,
                 self.function_impl,
@@ -177,7 +170,6 @@ async def async_setup_entry(
 
 def _format_tool(tool: llm.Tool, custom_serializer: Callable[[Any], Any] | None) -> FunctionToolParam:
     """Format tool specification."""
-    # Check if it's a CustomFunctionTool and use its function_spec parameters directly
     if isinstance(tool, CustomFunctionTool):
         return FunctionToolParam(
             type="function",
@@ -186,7 +178,6 @@ def _format_tool(tool: llm.Tool, custom_serializer: Callable[[Any], Any] | None)
             description=tool.description,
             strict=False,
         )
-    # Otherwise, use the standard conversion for regular Tools
     return FunctionToolParam(
         type="function",
         name=tool.name,
@@ -235,7 +226,6 @@ async def _transform_stream(
 ) -> AsyncGenerator[conversation.AssistantContentDeltaDict]:
     """Transform an OpenAI delta stream into HA format."""
     async for event in result:
-        # Log each stream event
         log_openai_stream_event(event)
 
         if isinstance(event, ResponseOutputItemAddedEvent):
@@ -332,7 +322,6 @@ class OmniConvEntity(conversation.ConversationEntity, conversation.AbstractConve
         from .exceptions import FunctionNotFound, InvalidFunction
 
         try:
-            # Get functions from configuration
             function_yaml = self.entry.options.get(CONF_FUNCTIONS)
             functions = yaml.safe_load(function_yaml) if function_yaml else DEFAULT_CONF_FUNCTIONS
 
@@ -405,13 +394,10 @@ class OmniConvEntity(conversation.ConversationEntity, conversation.AbstractConve
             if tools is None:
                 tools = []
 
-            # Add our custom tools to the LLM API's tools so they can be found by name during execution
             if chat_log.llm_api:
-                # We add our custom tools to the llm_api's tools list so they can be found later
                 for tool in custom_function_tools:
                     chat_log.llm_api.tools.append(tool)
 
-            # Format each custom function tool and add to the API tools list
             for tool in custom_function_tools:
                 tools.append(
                     _format_tool(
@@ -509,5 +495,4 @@ class OmniConvEntity(conversation.ConversationEntity, conversation.AbstractConve
 
     async def _async_entry_update_listener(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
         """Handle options update."""
-        # Reload as we update device info + entity name + supported features
         await hass.config_entries.async_reload(entry.entry_id)

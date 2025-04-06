@@ -11,8 +11,6 @@ tmp/
 *.egg
 .idea/
 .vscode/
-pyproject.toml
-*.lock
 _ext/
 .ruff_cache/
 .venv/

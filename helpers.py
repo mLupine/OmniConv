@@ -1,22 +1,19 @@
-from abc import ABC, abstractmethod
-from datetime import timedelta
-from functools import partial
 import json
 import logging
 import os
 import re
 import sqlite3
 import time
+from abc import ABC, abstractmethod
+from datetime import timedelta
+from functools import partial
 from typing import Any
 from urllib import parse
 
-from bs4 import BeautifulSoup
-from openai import AsyncAzureOpenAI, AsyncOpenAI
-from openai._streaming import AsyncStream
-from openai.types.responses import ResponseStreamEvent
+import homeassistant.util.dt as dt_util
 import voluptuous as vol
 import yaml
-
+from bs4 import BeautifulSoup
 from homeassistant.components import (
     automation,
     conversation,
@@ -46,7 +43,9 @@ from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.httpx_client import get_async_client
 from homeassistant.helpers.script import Script
 from homeassistant.helpers.template import Template
-import homeassistant.util.dt as dt_util
+from openai import AsyncAzureOpenAI, AsyncOpenAI
+from openai._streaming import AsyncStream
+from openai.types.responses import ResponseStreamEvent
 
 from .const import CONF_PAYLOAD_TEMPLATE, DOMAIN, EVENT_AUTOMATION_REGISTERED
 from .exceptions import (
@@ -84,16 +83,12 @@ def log_openai_request(endpoint: str, **kwargs) -> None:
         endpoint: The API endpoint being called (e.g., 'responses.create')
         **kwargs: The request parameters
     """
-    # Create a safe copy of the request parameters to log
     safe_kwargs = {**kwargs}
 
-    # Redact any sensitive information
     if "api_key" in safe_kwargs:
         safe_kwargs["api_key"] = "***REDACTED***"
 
-    _LOGGER.info(
-        "OpenAI API request to %s: %s", endpoint, json.dumps(safe_kwargs, default=str)
-    )
+    _LOGGER.info("OpenAI API request to %s: %s", endpoint, json.dumps(safe_kwargs, default=str))
 
 
 def log_openai_response(endpoint: str, response: Any) -> None:
@@ -110,9 +105,7 @@ def log_openai_response(endpoint: str, response: Any) -> None:
 
     # For regular responses, log the entire response (convert to dict for serialization)
     try:
-        response_data = (
-            response.model_dump() if hasattr(response, "model_dump") else str(response)
-        )
+        response_data = response.model_dump() if hasattr(response, "model_dump") else str(response)
         _LOGGER.info(
             "OpenAI API response from %s: %s",
             endpoint,
@@ -154,9 +147,7 @@ def log_openai_stream_event(event: ResponseStreamEvent) -> None:
                 json.dumps(event_data, default=str),
             )
     except Exception as err:
-        _LOGGER.warning(
-            "OpenAI stream event %s (error serializing: %s)", event_type, err
-        )
+        _LOGGER.warning("OpenAI stream event %s (error serializing: %s)", event_type, err)
 
 
 def convert_to_template(
@@ -170,9 +161,7 @@ def convert_to_template(
 def _convert_to_template(settings, template_keys, hass, parents: list[str]):
     if isinstance(settings, dict):
         for key, value in settings.items():
-            if isinstance(value, str) and (
-                key in template_keys or set(parents).intersection(template_keys)
-            ):
+            if isinstance(value, str) and (key in template_keys or set(parents).intersection(template_keys)):
                 settings[key] = Template(value, hass)
             if isinstance(value, dict):
                 parents.append(key)
@@ -197,16 +186,12 @@ def _get_rest_data(hass, rest_config, arguments):
     resource_template: Template | None = rest_config.get(CONF_RESOURCE_TEMPLATE)
     if resource_template is not None:
         rest_config.pop(CONF_RESOURCE_TEMPLATE)
-        rest_config[CONF_RESOURCE] = resource_template.async_render(
-            arguments, parse_result=False
-        )
+        rest_config[CONF_RESOURCE] = resource_template.async_render(arguments, parse_result=False)
 
     payload_template: Template | None = rest_config.get(CONF_PAYLOAD_TEMPLATE)
     if payload_template is not None:
         rest_config.pop(CONF_PAYLOAD_TEMPLATE)
-        rest_config[CONF_PAYLOAD] = payload_template.async_render(
-            arguments, parse_result=False
-        )
+        rest_config[CONF_PAYLOAD] = payload_template.async_render(arguments, parse_result=False)
 
     return rest.create_rest_data_from_config(hass, rest_config)
 
@@ -216,8 +201,8 @@ async def validate_authentication(
     api_key: str,
     base_url: str,
     api_version: str,
-    organization: str = None,
-    skip_authentication=False,
+    organization: str | None = None,
+    skip_authentication: bool = False,
 ) -> None:
     if skip_authentication:
         return
@@ -291,33 +276,19 @@ class NativeFunctionExecutor(FunctionExecutor):
     ):
         name = function["name"]
         if name == "execute_service":
-            return await self.execute_service(
-                hass, function, arguments, user_input, exposed_entities
-            )
+            return await self.execute_service(hass, function, arguments, user_input, exposed_entities)
         if name == "execute_service_single":
-            return await self.execute_service_single(
-                hass, function, arguments, user_input, exposed_entities
-            )
+            return await self.execute_service_single(hass, function, arguments, user_input, exposed_entities)
         if name == "add_automation":
-            return await self.add_automation(
-                hass, function, arguments, user_input, exposed_entities
-            )
+            return await self.add_automation(hass, function, arguments, user_input, exposed_entities)
         if name == "get_history":
-            return await self.get_history(
-                hass, function, arguments, user_input, exposed_entities
-            )
+            return await self.get_history(hass, function, arguments, user_input, exposed_entities)
         if name == "get_energy":
-            return await self.get_energy(
-                hass, function, arguments, user_input, exposed_entities
-            )
+            return await self.get_energy(hass, function, arguments, user_input, exposed_entities)
         if name == "get_statistics":
-            return await self.get_statistics(
-                hass, function, arguments, user_input, exposed_entities
-            )
+            return await self.get_statistics(hass, function, arguments, user_input, exposed_entities)
         if name == "get_user_from_user_id":
-            return await self.get_user_from_user_id(
-                hass, function, arguments, user_input, exposed_entities
-            )
+            return await self.get_user_from_user_id(hass, function, arguments, user_input, exposed_entities)
 
         raise NativeNotFound(name)
 
@@ -331,9 +302,7 @@ class NativeFunctionExecutor(FunctionExecutor):
     ):
         domain = service_argument["domain"]
         service = service_argument["service"]
-        service_data = service_argument.get(
-            "service_data", service_argument.get("data", {})
-        )
+        service_data = service_argument.get("service_data", service_argument.get("data", {}))
         entity_id = service_data.get("entity_id", service_argument.get("entity_id"))
         area_id = service_data.get("area_id")
         device_id = service_data.get("device_id")
@@ -370,9 +339,7 @@ class NativeFunctionExecutor(FunctionExecutor):
         result = []
         for service_argument in arguments.get("list", []):
             result.append(
-                await self.execute_service_single(
-                    hass, function, service_argument, user_input, exposed_entities
-                )
+                await self.execute_service_single(hass, function, service_argument, user_input, exposed_entities)
             )
         return result
 
@@ -539,9 +506,7 @@ class ScriptFunctionExecutor(FunctionExecutor):
             logger=_LOGGER,
         )
 
-        result = await script.async_run(
-            run_variables=arguments, context=user_input.context
-        )
+        result = await script.async_run(run_variables=arguments, context=user_input.context)
         return result.variables.get("_function_result", "Success")
 
 
@@ -604,9 +569,7 @@ class RestFunctionExecutor(FunctionExecutor):
         value_template = config.get(CONF_VALUE_TEMPLATE)
 
         if value is not None and value_template is not None:
-            value = value_template.async_render_with_possible_json_value(
-                value, None, arguments
-            )
+            value = value_template.async_render_with_possible_json_value(value, None, arguments)
 
         return value
 
@@ -644,9 +607,7 @@ class ScrapeFunctionExecutor(FunctionExecutor):
 
         for sensor_config in config["sensor"]:
             name: Template = sensor_config.get(CONF_NAME)
-            value = self._async_update_from_rest_data(
-                coordinator.data, sensor_config, arguments
-            )
+            value = self._async_update_from_rest_data(coordinator.data, sensor_config, arguments)
             new_arguments["value"] = value
             if name:
                 new_arguments[name.async_render()] = value
@@ -655,9 +616,7 @@ class ScrapeFunctionExecutor(FunctionExecutor):
         value_template = config.get(CONF_VALUE_TEMPLATE)
 
         if value_template is not None:
-            result = value_template.async_render_with_possible_json_value(
-                result, None, new_arguments
-            )
+            result = value_template.async_render_with_possible_json_value(result, None, new_arguments)
 
         return result
 
@@ -672,9 +631,7 @@ class ScrapeFunctionExecutor(FunctionExecutor):
         value_template = sensor_config.get(CONF_VALUE_TEMPLATE)
 
         if value_template is not None:
-            value = value_template.async_render_with_possible_json_value(
-                value, None, arguments
-            )
+            value = value_template.async_render_with_possible_json_value(value, None, arguments)
 
         return value
 
@@ -706,15 +663,7 @@ class ScrapeFunctionExecutor(FunctionExecutor):
 class CompositeFunctionExecutor(FunctionExecutor):
     def __init__(self) -> None:
         """initialize composite function"""
-        super().__init__(
-            vol.Schema(
-                {
-                    vol.Required("sequence"): vol.All(
-                        cv.ensure_list, [self.function_schema]
-                    )
-                }
-            )
-        )
+        super().__init__(vol.Schema({vol.Required("sequence"): vol.All(cv.ensure_list, [self.function_schema])}))
 
     def function_schema(self, value: Any) -> dict:
         """Validate a composite function schema."""
@@ -739,9 +688,7 @@ class CompositeFunctionExecutor(FunctionExecutor):
 
         for executor_config in sequence:
             function_executor = get_function_executor(executor_config["type"])
-            result = await function_executor.execute(
-                hass, executor_config, arguments, user_input, exposed_entities
-            )
+            result = await function_executor.execute(hass, executor_config, arguments, user_input, exposed_entities)
 
             response_variable = executor_config.get("response_variable")
             if response_variable:
@@ -764,18 +711,11 @@ class SqliteFunctionExecutor(FunctionExecutor):
         )
 
     def is_exposed(self, entity_id, exposed_entities) -> bool:
-        return any(
-            exposed_entity["entity_id"] == entity_id
-            for exposed_entity in exposed_entities
-        )
+        return any(exposed_entity["entity_id"] == entity_id for exposed_entity in exposed_entities)
 
     def is_exposed_entity_in_query(self, query: str, exposed_entities) -> bool:
-        exposed_entity_ids = list(
-            map(lambda e: f"'{e['entity_id']}'", exposed_entities)
-        )
-        return any(
-            exposed_entity_id in query for exposed_entity_id in exposed_entity_ids
-        )
+        exposed_entity_ids = list(map(lambda e: f"'{e['entity_id']}'", exposed_entities))
+        return any(exposed_entity_id in query for exposed_entity_id in exposed_entity_ids)
 
     def raise_error(self, msg="Unexpected error occurred."):
         raise HomeAssistantError(msg)
@@ -801,16 +741,12 @@ class SqliteFunctionExecutor(FunctionExecutor):
         user_input: conversation.ConversationInput,
         exposed_entities,
     ):
-        db_url = self.set_url_read_only(
-            function.get("db_url", self.get_default_db_url(hass))
-        )
+        db_url = self.set_url_read_only(function.get("db_url", self.get_default_db_url(hass)))
         query = function.get("query", "{{query}}")
 
         template_arguments = {
             "is_exposed": lambda e: self.is_exposed(e, exposed_entities),
-            "is_exposed_entity_in_query": lambda q: self.is_exposed_entity_in_query(
-                q, exposed_entities
-            ),
+            "is_exposed_entity_in_query": lambda q: self.is_exposed_entity_in_query(q, exposed_entities),
             "exposed_entities": exposed_entities,
             "raise": self.raise_error,
         }

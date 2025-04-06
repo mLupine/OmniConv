@@ -9,6 +9,18 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 import openai
+import voluptuous as vol
+from homeassistant.core import (
+    HomeAssistant,
+    ServiceCall,
+    ServiceResponse,
+    SupportsResponse,
+)
+from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
+from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers import selector
+from homeassistant.helpers.typing import ConfigType
+from openai._exceptions import OpenAIError
 from openai.types.images_response import ImagesResponse
 from openai.types.responses import (
     EasyInputMessageParam,
@@ -19,21 +31,6 @@ from openai.types.responses import (
     ResponseInputParam,
     ResponseInputTextParam,
 )
-import voluptuous as vol
-
-from homeassistant.core import (
-    HomeAssistant,
-    ServiceCall,
-    ServiceResponse,
-    SupportsResponse,
-)
-from homeassistant.exceptions import (
-    HomeAssistantError,
-    ServiceValidationError,
-)
-from homeassistant.helpers import config_validation as cv, selector
-from homeassistant.helpers.typing import ConfigType
-from openai._exceptions import OpenAIError
 
 from .const import (
     CONF_CHAT_MODEL,
@@ -130,12 +127,8 @@ async def async_setup_services(hass: HomeAssistant, config: ConfigType) -> None:
 
         try:
             if is_azure(entry.options.get("base_url", "")):
-                # Azure OpenAI uses different API for DALL-E
-                raise HomeAssistantError(
-                    "DALL-E image generation not supported with Azure OpenAI"
-                )
+                raise HomeAssistantError("DALL-E image generation not supported with Azure OpenAI")
 
-            # Create request parameters
             request_params = {
                 "model": "dall-e-3",
                 "prompt": call.data[CONF_PROMPT],
@@ -146,13 +139,10 @@ async def async_setup_services(hass: HomeAssistant, config: ConfigType) -> None:
                 "n": 1,
             }
 
-            # Log the request parameters
             log_openai_request("images.generate", **request_params)
 
-            # Make the API call
             response: ImagesResponse = await client.images.generate(**request_params)
 
-            # Log the response
             log_openai_response("images.generate", response)
         except openai.OpenAIError as err:
             raise HomeAssistantError(f"Error generating image: {err}") from err
@@ -215,47 +205,33 @@ async def async_setup_services(hass: HomeAssistant, config: ConfigType) -> None:
         if CONF_FILENAMES in call.data:
             await hass.async_add_executor_job(append_files_to_content)
 
-        messages: ResponseInputParam = [
-            EasyInputMessageParam(type="message", role="user", content=content)
-        ]
+        messages: ResponseInputParam = [EasyInputMessageParam(type="message", role="user", content=content)]
 
         try:
             model_args = {
                 "model": model,
                 "input": messages,
-                "max_output_tokens": entry.options.get(
-                    CONF_MAX_TOKENS, RECOMMENDED_MAX_TOKENS
-                ),
+                "max_output_tokens": entry.options.get(CONF_MAX_TOKENS, RECOMMENDED_MAX_TOKENS),
                 "top_p": entry.options.get(CONF_TOP_P, RECOMMENDED_TOP_P),
-                "temperature": entry.options.get(
-                    CONF_TEMPERATURE, RECOMMENDED_TEMPERATURE
-                ),
+                "temperature": entry.options.get(CONF_TEMPERATURE, RECOMMENDED_TEMPERATURE),
                 "user": call.context.user_id,
                 "store": False,
             }
 
             if model.startswith("o"):
                 model_args["reasoning"] = {
-                    "effort": entry.options.get(
-                        CONF_REASONING_EFFORT, RECOMMENDED_REASONING_EFFORT
-                    )
+                    "effort": entry.options.get(CONF_REASONING_EFFORT, RECOMMENDED_REASONING_EFFORT)
                 }
 
-            # Handle Azure OpenAI if applicable
             if is_azure(entry.options.get("base_url", "")):
-                # Azure OpenAI uses deployments instead of model names
                 deployment = model
-                # Azure uses 'deployment' parameter instead of 'model'
                 model_args.pop("model")
                 model_args["deployment"] = deployment
 
-            # Log the request parameters
             log_openai_request("responses.create", **model_args)
 
-            # Make the API call
             response: Response = await client.responses.create(**model_args)
 
-            # Log the response
             log_openai_response("responses.create", response)
 
         except openai.OpenAIError as err:
@@ -279,43 +255,29 @@ async def async_setup_services(hass: HomeAssistant, config: ConfigType) -> None:
 
         try:
             model = call.data["model"]
-            images = [
-                {"type": "image_url", "image_url": to_image_param(hass, image)}
-                for image in call.data["images"]
-            ]
+            images = [{"type": "image_url", "image_url": to_image_param(hass, image)} for image in call.data["images"]]
 
             messages = [
                 {
                     "role": "user",
-                    "content": [{"type": "text", "text": call.data["prompt"]}] + images,
+                    "content": [{"type": "text", "text": call.data["prompt"]}, *images],
                 }
             ]
             _LOGGER.info("Prompt for %s: %s", model, messages)
 
             client = entry.runtime_data
 
-            # Prepare request parameters
             if is_azure(entry.options.get("base_url", "")):
-                # For Azure OpenAI, we need to use the deployment name
                 request_params = {
                     "deployment_id": model,  # Azure uses deployment_id instead of model
                     "messages": messages,
                     "max_tokens": call.data["max_tokens"],
                 }
-            else:
-                request_params = {
-                    "model": model,
-                    "messages": messages,
-                    "max_tokens": call.data["max_tokens"],
-                }
 
-            # Log the request parameters
             log_openai_request("chat.completions.create", **request_params)
 
-            # Make the API call
             response = await client.chat.completions.create(**request_params)
 
-            # Log the response
             log_openai_response("chat.completions.create", response)
 
             response_dict = response.model_dump()
@@ -324,7 +286,6 @@ async def async_setup_services(hass: HomeAssistant, config: ConfigType) -> None:
 
         return response_dict
 
-    # Register all services
     hass.services.async_register(
         DOMAIN,
         SERVICE_GENERATE_CONTENT,
@@ -337,9 +298,7 @@ async def async_setup_services(hass: HomeAssistant, config: ConfigType) -> None:
                     }
                 ),
                 vol.Required(CONF_PROMPT): cv.string,
-                vol.Optional(CONF_FILENAMES, default=[]): vol.All(
-                    cv.ensure_list, [cv.string]
-                ),
+                vol.Optional(CONF_FILENAMES, default=[]): vol.All(cv.ensure_list, [cv.string]),
             }
         ),
         supports_response=SupportsResponse.ONLY,
@@ -357,9 +316,7 @@ async def async_setup_services(hass: HomeAssistant, config: ConfigType) -> None:
                     }
                 ),
                 vol.Required(CONF_PROMPT): cv.string,
-                vol.Optional("size", default="1024x1024"): vol.In(
-                    ("1024x1024", "1024x1792", "1792x1024")
-                ),
+                vol.Optional("size", default="1024x1024"): vol.In(("1024x1024", "1024x1792", "1792x1024")),
                 vol.Optional("quality", default="standard"): vol.In(("standard", "hd")),
                 vol.Optional("style", default="vivid"): vol.In(("vivid", "natural")),
             }

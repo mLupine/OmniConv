@@ -1,0 +1,37 @@
+[project]
+name = "omniconv"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = []
+
+[dependency-groups]
+dev = [
+    "homeassistant>=2025.4.0",
+    "voluptuous",
+    "PyYAML",
+    "beautifulsoup4",
+    "openai",
+    "python-slugify",
+    "voluptuous-openapi",
+]
+
+[tool.uv]
+default-groups = ["dev"]
+
+[tool.black]
+line-length = 120
+preview = true
+target-version = ['py313']
+
+[tool.isort]
+profile = "black"
+
+
+[tool.ruff]
+line-length = 120
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "PLC", "PLE", "PLW", "FLY", "RUF"]

@@ -73,7 +73,6 @@ class FlexAssistAPI(AssistAPI):
 
         entities_prompt_template = self.config_entry.options.get(CONF_ENTITIES_PROMPT, DEFAULT_ENTITIES_PROMPT)
 
-        # Define area_name function for template
         def get_area_name(entity_id):
             area_registry = ar.async_get(self.hass)
             entity_entry = entity_registry.async_get(entity_id)
@@ -83,7 +82,6 @@ class FlexAssistAPI(AssistAPI):
                 return area.name if area else None
             return None
 
-        # Create template variables
         template_vars = {
             "ha_name": self.hass.config.location_name,
             "exposed_entities": template_entities,
@@ -92,7 +90,6 @@ class FlexAssistAPI(AssistAPI):
             "area_name": get_area_name,
         }
 
-        # Render the template with strict handling disabled to prevent UndefinedError
         template_obj = Template(entities_prompt_template, self.hass)
         try:
             rendered_prompt = template_obj.async_render(

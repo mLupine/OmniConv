@@ -48,16 +48,12 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
 async def async_setup_entry(hass: HomeAssistant, entry: OmniConvConfigEntry) -> bool:
     """Set up OmniConv from a config entry."""
     base_url = entry.options.get(CONF_BASE_URL, DEFAULT_CONF_BASE_URL)
-    skip_authentication = entry.options.get(
-        CONF_SKIP_AUTHENTICATION, DEFAULT_SKIP_AUTHENTICATION
-    )
+    skip_authentication = entry.options.get(CONF_SKIP_AUTHENTICATION, DEFAULT_SKIP_AUTHENTICATION)
     organization = entry.options.get(CONF_ORGANIZATION)
 
     _ = await async_setup_api(hass, entry)
 
-    # Configure client based on whether it's Azure OpenAI or standard OpenAI
     if is_azure(base_url):
-        # For Azure OpenAI
         from openai import AzureOpenAI
 
         client = AzureOpenAI(
@@ -68,7 +64,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: OmniConvConfigEntry) -> 
             http_client=get_async_client(hass),
         )
     else:
-        # For standard OpenAI
         client = openai.AsyncOpenAI(
             api_key=entry.options.get(CONF_API_KEY, "-"),
             base_url=base_url,
@@ -86,9 +81,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: OmniConvConfigEntry) -> 
                 # Azure API doesn't have models.list, so we just verify we can connect
                 await client.with_options(timeout=10.0).deployments.list()
             else:
-                await hass.async_add_executor_job(
-                    client.with_options(timeout=10.0).models.list
-                )
+                await hass.async_add_executor_job(client.with_options(timeout=10.0).models.list)
         except openai.AuthenticationError as err:
             LOGGER.error("Invalid API key: %s", err)
             return False
