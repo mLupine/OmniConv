@@ -10,7 +10,7 @@ import yaml
 from homeassistant.components import assist_pipeline, conversation
 from homeassistant.components.homeassistant.exposed_entities import async_should_expose
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CONF_LLM_HASS_API, MATCH_ALL
+from homeassistant.const import MATCH_ALL
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import device_registry as dr
@@ -41,6 +41,7 @@ from openai.types.responses.web_search_tool_param import UserLocation
 from voluptuous_openapi import convert
 
 from . import OmniConvConfigEntry
+from .api import LLM_API_FLEX_ASSIST
 from .const import (
     CONF_CHAT_MODEL,
     CONF_FUNCTIONS,
@@ -83,9 +84,7 @@ class CustomFunctionTool(llm.Tool):
     def __init__(self, function_spec: dict, function_impl: dict) -> None:
         """Initialize the tool with function specification and implementation."""
         self.name = function_spec["name"]
-        self.description = function_spec.get(
-            "description", f"Execute {self.name} function"
-        )
+        self.description = function_spec.get("description", f"Execute {self.name} function")
 
         # Create an empty vol.Schema for compatibility with the voluptuous_openapi.convert function
         self.parameters = vol.Schema({})
@@ -176,9 +175,7 @@ async def async_setup_entry(
     async_add_entities([agent])
 
 
-def _format_tool(
-    tool: llm.Tool, custom_serializer: Callable[[Any], Any] | None
-) -> FunctionToolParam:
+def _format_tool(tool: llm.Tool, custom_serializer: Callable[[Any], Any] | None) -> FunctionToolParam:
     """Format tool specification."""
     # Check if it's a CustomFunctionTool and use its function_spec parameters directly
     if isinstance(tool, CustomFunctionTool):
@@ -217,9 +214,7 @@ def _convert_content_to_param(
         role: Literal["user", "assistant", "system", "developer"] = content.role
         if role == "system":
             role = "developer"
-        messages.append(
-            EasyInputMessageParam(type="message", role=role, content=content.content)
-        )
+        messages.append(EasyInputMessageParam(type="message", role=role, content=content.content))
 
     if isinstance(content, conversation.AssistantContent) and content.tool_calls:
         messages.extend(
@@ -284,10 +279,7 @@ async def _transform_stream(
                     }
                 )
 
-            if (
-                event.response.incomplete_details
-                and event.response.incomplete_details.reason
-            ):
+            if event.response.incomplete_details and event.response.incomplete_details.reason:
                 reason: str = event.response.incomplete_details.reason
             else:
                 reason = "unknown reason"
@@ -316,9 +308,7 @@ async def _transform_stream(
             raise HomeAssistantError(f"OpenAI response error: {event.message}")
 
 
-class OmniConvEntity(
-    conversation.ConversationEntity, conversation.AbstractConversationAgent
-):
+class OmniConvEntity(conversation.ConversationEntity, conversation.AbstractConversationAgent):
     """OmniConv conversation agent."""
 
     _attr_has_entity_name = True
@@ -335,10 +325,7 @@ class OmniConvEntity(
             model="ChatGPT",
             entry_type=dr.DeviceEntryType.SERVICE,
         )
-        if self.entry.options.get(CONF_LLM_HASS_API):
-            self._attr_supported_features = (
-                conversation.ConversationEntityFeature.CONTROL
-            )
+        self._attr_supported_features = conversation.ConversationEntityFeature.CONTROL
 
     def _get_custom_functions_as_tools(self) -> list[CustomFunctionTool]:
         """Get custom functions from configuration as Tools."""
@@ -347,11 +334,7 @@ class OmniConvEntity(
         try:
             # Get functions from configuration
             function_yaml = self.entry.options.get(CONF_FUNCTIONS)
-            functions = (
-                yaml.safe_load(function_yaml)
-                if function_yaml
-                else DEFAULT_CONF_FUNCTIONS
-            )
+            functions = yaml.safe_load(function_yaml) if function_yaml else DEFAULT_CONF_FUNCTIONS
 
             if not functions:
                 return []
@@ -384,13 +367,9 @@ class OmniConvEntity(
     async def async_added_to_hass(self) -> None:
         """When entity is added to Home Assistant."""
         await super().async_added_to_hass()
-        assist_pipeline.async_migrate_engine(
-            self.hass, "conversation", self.entry.entry_id, self.entity_id
-        )
+        assist_pipeline.async_migrate_engine(self.hass, "conversation", self.entry.entry_id, self.entity_id)
         conversation.async_set_agent(self.hass, self.entry, self)
-        self.entry.async_on_unload(
-            self.entry.add_update_listener(self._async_entry_update_listener)
-        )
+        self.entry.async_on_unload(self.entry.add_update_listener(self._async_entry_update_listener))
 
     async def async_will_remove_from_hass(self) -> None:
         """When entity will be removed from Home Assistant."""
@@ -406,10 +385,11 @@ class OmniConvEntity(
         options = self.entry.options
 
         try:
+            llm_api_id = f"{LLM_API_FLEX_ASSIST}_{self.entry.entry_id}"
             await chat_log.async_update_llm_data(
                 DOMAIN,
                 user_input,
-                options.get(CONF_LLM_HASS_API),
+                llm_api_id,
                 options.get(CONF_PROMPT),
             )
         except conversation.ConverseError as err:
@@ -417,10 +397,7 @@ class OmniConvEntity(
 
         tools: list[ToolParam] | None = None
         if chat_log.llm_api:
-            tools = [
-                _format_tool(tool, chat_log.llm_api.custom_serializer)
-                for tool in chat_log.llm_api.tools
-            ]
+            tools = [_format_tool(tool, chat_log.llm_api.custom_serializer) for tool in chat_log.llm_api.tools]
 
         # Add custom functions as tools
         custom_function_tools = self._get_custom_functions_as_tools()
@@ -439,11 +416,7 @@ class OmniConvEntity(
                 tools.append(
                     _format_tool(
                         tool,
-                        (
-                            chat_log.llm_api.custom_serializer
-                            if chat_log.llm_api
-                            else None
-                        ),
+                        (chat_log.llm_api.custom_serializer if chat_log.llm_api else None),
                     )
                 )
             LOGGER.info(
@@ -454,9 +427,7 @@ class OmniConvEntity(
         if options.get(CONF_WEB_SEARCH):
             web_search = WebSearchToolParam(
                 type="web_search_preview",
-                search_context_size=options.get(
-                    CONF_WEB_SEARCH_CONTEXT_SIZE, RECOMMENDED_WEB_SEARCH_CONTEXT_SIZE
-                ),
+                search_context_size=options.get(CONF_WEB_SEARCH_CONTEXT_SIZE, RECOMMENDED_WEB_SEARCH_CONTEXT_SIZE),
             )
             if options.get(CONF_WEB_SEARCH_USER_LOCATION):
                 web_search["user_location"] = UserLocation(
@@ -471,11 +442,7 @@ class OmniConvEntity(
             tools.append(web_search)
 
         model = options.get(CONF_CHAT_MODEL, RECOMMENDED_CHAT_MODEL)
-        messages = [
-            m
-            for content in chat_log.content
-            for m in _convert_content_to_param(content)
-        ]
+        messages = [m for content in chat_log.content for m in _convert_content_to_param(content)]
 
         client = self.entry.runtime_data
 
@@ -484,9 +451,7 @@ class OmniConvEntity(
             model_args = {
                 "model": model,
                 "input": messages,
-                "max_output_tokens": options.get(
-                    CONF_MAX_TOKENS, RECOMMENDED_MAX_TOKENS
-                ),
+                "max_output_tokens": options.get(CONF_MAX_TOKENS, RECOMMENDED_MAX_TOKENS),
                 "top_p": options.get(CONF_TOP_P, RECOMMENDED_TOP_P),
                 "temperature": options.get(CONF_TEMPERATURE, RECOMMENDED_TEMPERATURE),
                 "user": chat_log.conversation_id,
@@ -497,11 +462,7 @@ class OmniConvEntity(
                 model_args["tools"] = tools
 
             if model.startswith("o"):
-                model_args["reasoning"] = {
-                    "effort": options.get(
-                        CONF_REASONING_EFFORT, RECOMMENDED_REASONING_EFFORT
-                    )
-                }
+                model_args["reasoning"] = {"effort": options.get(CONF_REASONING_EFFORT, RECOMMENDED_REASONING_EFFORT)}
 
             try:
                 # Handle Azure OpenAI if applicable
@@ -546,9 +507,7 @@ class OmniConvEntity(
             continue_conversation=chat_log.continue_conversation,
         )
 
-    async def _async_entry_update_listener(
-        self, hass: HomeAssistant, entry: ConfigEntry
-    ) -> None:
+    async def _async_entry_update_listener(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
         """Handle options update."""
         # Reload as we update device info + entity name + supported features
         await hass.config_entries.async_reload(entry.entry_id)

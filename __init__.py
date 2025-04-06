@@ -61,7 +61,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: OmniConvConfigEntry) -> 
         from openai import AzureOpenAI
 
         client = AzureOpenAI(
-            api_key=entry.options[CONF_API_KEY],
+            api_key=entry.options.get(CONF_API_KEY, "-"),
             azure_endpoint=base_url,
             api_version=entry.options.get("api_version", "2023-12-01-preview"),
             organization=organization,
@@ -70,7 +70,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: OmniConvConfigEntry) -> 
     else:
         # For standard OpenAI
         client = openai.AsyncOpenAI(
-            api_key=entry.options[CONF_API_KEY],
+            api_key=entry.options.get(CONF_API_KEY, "-"),
             base_url=base_url,
             organization=organization,
             http_client=get_async_client(hass),

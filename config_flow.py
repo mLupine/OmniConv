@@ -13,13 +13,7 @@ import voluptuous as vol
 import yaml
 from homeassistant import config_entries
 from homeassistant.components.zone import ENTITY_ID_HOME
-from homeassistant.const import (
-    ATTR_LATITUDE,
-    ATTR_LONGITUDE,
-    CONF_API_KEY,
-    CONF_LLM_HASS_API,
-    CONF_NAME,
-)
+from homeassistant.const import ATTR_LATITUDE, ATTR_LONGITUDE, CONF_API_KEY, CONF_NAME
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResult
 from homeassistant.helpers import llm
@@ -54,7 +48,6 @@ from .const import (
     CONF_SKIP_AUTHENTICATION,
     CONF_TEMPERATURE,
     CONF_TOP_P,
-    CONF_USE_TOOLS,
     CONF_WEB_SEARCH,
     CONF_WEB_SEARCH_CITY,
     CONF_WEB_SEARCH_CONTEXT_SIZE,
@@ -77,7 +70,6 @@ from .const import (
     DEFAULT_SKIP_AUTHENTICATION,
     DEFAULT_TEMPERATURE,
     DEFAULT_TOP_P,
-    DEFAULT_USE_TOOLS,
     DOMAIN,
     RECOMMENDED_CHAT_MODEL,
     RECOMMENDED_MAX_TOKENS,
@@ -107,21 +99,17 @@ DEFAULT_OPTIONS = types.MappingProxyType(
         CONF_ENTITIES_PROMPT: DEFAULT_ENTITIES_PROMPT,
         CONF_CHAT_MODEL: DEFAULT_CHAT_MODEL,
         CONF_MAX_TOKENS: DEFAULT_MAX_TOKENS,
-        CONF_MAX_FUNCTION_CALLS_PER_CONVERSATION: (
-            DEFAULT_MAX_FUNCTION_CALLS_PER_CONVERSATION
-        ),
+        CONF_MAX_FUNCTION_CALLS_PER_CONVERSATION: (DEFAULT_MAX_FUNCTION_CALLS_PER_CONVERSATION),
         CONF_TOP_P: DEFAULT_TOP_P,
         CONF_TEMPERATURE: DEFAULT_TEMPERATURE,
         CONF_FUNCTIONS: DEFAULT_CONF_FUNCTIONS_STR,
         CONF_ATTACH_USERNAME: DEFAULT_ATTACH_USERNAME,
-        CONF_USE_TOOLS: DEFAULT_USE_TOOLS,
         CONF_CONTEXT_THRESHOLD: DEFAULT_CONTEXT_THRESHOLD,
         CONF_CONTEXT_TRUNCATE_STRATEGY: DEFAULT_CONTEXT_TRUNCATE_STRATEGY,
     }
 )
 
 DEFAULT_INTEGRATION_OPTIONS = {
-    CONF_LLM_HASS_API: llm.LLM_API_ASSIST,
     CONF_PROMPT: llm.DEFAULT_INSTRUCTIONS_PROMPT,
     CONF_ENTITIES_PROMPT: DEFAULT_ENTITIES_PROMPT,
 }
@@ -132,9 +120,7 @@ async def validate_options(hass: HomeAssistant, data: dict[str, Any]) -> None:
 
     Data has the API keys and connection details from the options form.
     """
-    skip_authentication = data.get(
-        CONF_SKIP_AUTHENTICATION, DEFAULT_SKIP_AUTHENTICATION
-    )
+    skip_authentication = data.get(CONF_SKIP_AUTHENTICATION, DEFAULT_SKIP_AUTHENTICATION)
 
     # Only validate if authentication is not skipped and API key is provided
     if not skip_authentication and CONF_API_KEY in data:
@@ -163,14 +149,10 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     VERSION = 1
 
-    async def async_step_user(
-        self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
+    async def async_step_user(self, user_input: dict[str, Any] | None = None) -> FlowResult:
         """Handle the initial step."""
         if user_input is None:
-            return self.async_show_form(
-                step_id="user", data_schema=STEP_USER_DATA_SCHEMA
-            )
+            return self.async_show_form(step_id="user", data_schema=STEP_USER_DATA_SCHEMA)
 
         # Create default options with API configuration
         options = dict(DEFAULT_INTEGRATION_OPTIONS)
@@ -199,27 +181,18 @@ class OptionsFlow(config_entries.OptionsFlow):
         """Initialize options flow."""
         self.config_entry = config_entry
 
-    async def async_step_init(
-        self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
+    async def async_step_init(self, user_input: dict[str, Any] | None = None) -> FlowResult:
         """Manage the options."""
         options: dict[str, Any] | MappingProxyType[str, Any] = self.config_entry.options
         errors: dict[str, str] = {}
 
         if user_input is not None:
             # Check if CONF_SKIP_AUTHENTICATION has changed, which requires re-rendering
-            current_skip_auth = options.get(
-                CONF_SKIP_AUTHENTICATION, DEFAULT_SKIP_AUTHENTICATION
-            )
-            new_skip_auth = user_input.get(
-                CONF_SKIP_AUTHENTICATION, DEFAULT_SKIP_AUTHENTICATION
-            )
+            current_skip_auth = options.get(CONF_SKIP_AUTHENTICATION, DEFAULT_SKIP_AUTHENTICATION)
+            new_skip_auth = user_input.get(CONF_SKIP_AUTHENTICATION, DEFAULT_SKIP_AUTHENTICATION)
             rerender_form = current_skip_auth != new_skip_auth
 
             if not rerender_form:
-                if user_input[CONF_LLM_HASS_API] == "none":
-                    user_input.pop(CONF_LLM_HASS_API)
-
                 if user_input.get(CONF_CHAT_MODEL) in UNSUPPORTED_MODELS:
                     errors[CONF_CHAT_MODEL] = "model_not_supported"
 
@@ -235,16 +208,12 @@ class OptionsFlow(config_entries.OptionsFlow):
                     _LOGGER.exception("Unexpected exception")
                     errors["base"] = "unknown"
 
-                if user_input.get(CONF_WEB_SEARCH) and user_input.get(
-                    CONF_WEB_SEARCH_USER_LOCATION
-                ):
+                if user_input.get(CONF_WEB_SEARCH) and user_input.get(CONF_WEB_SEARCH_USER_LOCATION):
                     user_input.update(await self.get_location_data())
 
                 if not errors:
                     # If functions are provided as a string, validate they're a proper YAML structure
-                    if CONF_FUNCTIONS in user_input and isinstance(
-                        user_input[CONF_FUNCTIONS], str
-                    ):
+                    if CONF_FUNCTIONS in user_input and isinstance(user_input[CONF_FUNCTIONS], str):
                         try:
                             yaml.safe_load(user_input[CONF_FUNCTIONS])
                         except yaml.YAMLError as err:
@@ -258,14 +227,11 @@ class OptionsFlow(config_entries.OptionsFlow):
                 options = {
                     CONF_PROMPT: user_input[CONF_PROMPT],
                     CONF_ENTITIES_PROMPT: user_input[CONF_ENTITIES_PROMPT],
-                    CONF_LLM_HASS_API: user_input[CONF_LLM_HASS_API],
                 }
 
                 # Include the skip_authentication value if it exists
                 if CONF_SKIP_AUTHENTICATION in user_input:
-                    options[CONF_SKIP_AUTHENTICATION] = user_input[
-                        CONF_SKIP_AUTHENTICATION
-                    ]
+                    options[CONF_SKIP_AUTHENTICATION] = user_input[CONF_SKIP_AUTHENTICATION]
 
         schema = openai_config_option_schema(self.hass, options)
         return self.async_show_form(
@@ -280,9 +246,7 @@ class OptionsFlow(config_entries.OptionsFlow):
         zone_home = self.hass.states.get(ENTITY_ID_HOME)
         if zone_home is not None:
             # Configure client based on whether it's Azure OpenAI or standard OpenAI
-            base_url = self.config_entry.options.get(
-                CONF_BASE_URL, DEFAULT_CONF_BASE_URL
-            )
+            base_url = self.config_entry.options.get(CONF_BASE_URL, DEFAULT_CONF_BASE_URL)
             if is_azure(base_url):
                 # Skip location detection for Azure OpenAI
                 _LOGGER.debug("Skipping location detection with Azure OpenAI")
@@ -321,10 +285,7 @@ class OptionsFlow(config_entries.OptionsFlow):
                         "format": {
                             "type": "json_schema",
                             "name": "approximate_location",
-                            "description": (
-                                "Approximate location data of the user "
-                                "for refined web search results"
-                            ),
+                            "description": ("Approximate location data of the user " "for refined web search results"),
                             "schema": convert(location_schema),
                             "strict": False,
                         }
@@ -347,61 +308,45 @@ def openai_config_option_schema(
     options: dict[str, Any] | MappingProxyType[str, Any],
 ) -> dict:
     """Return a schema for OpenAI completion options."""
-    hass_apis: list[SelectOptionDict] = [
-        SelectOptionDict(
-            label="No control",
-            value="none",
-        )
-    ]
-    hass_apis.extend(
-        SelectOptionDict(
-            label=api.name,
-            value=api.id,
-        )
-        for api in llm.async_get_apis(hass)
-    )
-
     skip_auth = options.get(CONF_SKIP_AUTHENTICATION, DEFAULT_SKIP_AUTHENTICATION)
 
     schema: dict = {
-        vol.Optional(
-            CONF_SKIP_AUTHENTICATION, default=DEFAULT_SKIP_AUTHENTICATION
-        ): bool,
+        vol.Optional(CONF_SKIP_AUTHENTICATION, default=DEFAULT_SKIP_AUTHENTICATION): bool,
     }
 
     # API key is only required if skip_authentication is False
+    api_key_options = dict(
+        description={"suggested_value": options.get(CONF_API_KEY)},
+    )
     if not skip_auth:
-        schema[vol.Required(CONF_API_KEY)] = str
+        schema[vol.Required(CONF_API_KEY, **api_key_options)] = str
     else:
-        schema[vol.Optional(CONF_API_KEY)] = str
+        schema[vol.Optional(CONF_API_KEY, **api_key_options)] = str
 
     # Add the rest of the authentication fields
     schema.update(
         {
-            vol.Optional(CONF_BASE_URL, default=DEFAULT_CONF_BASE_URL): str,
-            vol.Optional(CONF_API_VERSION): str,
-            vol.Optional(CONF_ORGANIZATION): str,
+            vol.Optional(
+                CONF_BASE_URL,
+                default=DEFAULT_CONF_BASE_URL,
+                description={"suggested_value": options.get(CONF_BASE_URL, llm.DEFAULT_INSTRUCTIONS_PROMPT)},
+            ): str,
+            vol.Optional(
+                CONF_API_VERSION,
+                description={"suggested_value": options.get(CONF_API_VERSION)},
+            ): str,
+            vol.Optional(
+                CONF_ORGANIZATION,
+                description={"suggested_value": options.get(CONF_ORGANIZATION)},
+            ): str,
             vol.Optional(
                 CONF_PROMPT,
-                description={
-                    "suggested_value": options.get(
-                        CONF_PROMPT, llm.DEFAULT_INSTRUCTIONS_PROMPT
-                    )
-                },
+                description={"suggested_value": options.get(CONF_PROMPT)},
             ): TemplateSelector(),
             vol.Optional(
                 CONF_ENTITIES_PROMPT,
-                description={
-                    "suggested_value": options.get(
-                        CONF_ENTITIES_PROMPT, DEFAULT_ENTITIES_PROMPT
-                    )
-                },
+                description={"suggested_value": options.get(CONF_ENTITIES_PROMPT, DEFAULT_ENTITIES_PROMPT)},
             ): TemplateSelector(),
-            vol.Optional(
-                CONF_LLM_HASS_API,
-                description={"suggested_value": options.get(CONF_LLM_HASS_API)},
-                default="none",
-            ): SelectSelector(SelectSelectorConfig(options=hass_apis)),
         }
     )
 
@@ -446,9 +391,7 @@ def openai_config_option_schema(
             ): bool,
             vol.Optional(
                 CONF_WEB_SEARCH_CONTEXT_SIZE,
-                description={
-                    "suggested_value": options.get(CONF_WEB_SEARCH_CONTEXT_SIZE)
-                },
+                description={"suggested_value": options.get(CONF_WEB_SEARCH_CONTEXT_SIZE)},
                 default=RECOMMENDED_WEB_SEARCH_CONTEXT_SIZE,
             ): SelectSelector(
                 SelectSelectorConfig(
@@ -459,19 +402,13 @@ def openai_config_option_schema(
             ),
             vol.Optional(
                 CONF_WEB_SEARCH_USER_LOCATION,
-                description={
-                    "suggested_value": options.get(CONF_WEB_SEARCH_USER_LOCATION)
-                },
+                description={"suggested_value": options.get(CONF_WEB_SEARCH_USER_LOCATION)},
                 default=RECOMMENDED_WEB_SEARCH_USER_LOCATION,
             ): bool,
             # Extended component settings
             vol.Optional(
                 CONF_MAX_FUNCTION_CALLS_PER_CONVERSATION,
-                description={
-                    "suggested_value": options.get(
-                        CONF_MAX_FUNCTION_CALLS_PER_CONVERSATION
-                    )
-                },
+                description={"suggested_value": options.get(CONF_MAX_FUNCTION_CALLS_PER_CONVERSATION)},
                 default=DEFAULT_MAX_FUNCTION_CALLS_PER_CONVERSATION,
             ): int,
             vol.Optional(
@@ -485,20 +422,13 @@ def openai_config_option_schema(
                 default=DEFAULT_ATTACH_USERNAME,
             ): BooleanSelector(),
             vol.Optional(
-                CONF_USE_TOOLS,
-                description={"suggested_value": options.get(CONF_USE_TOOLS)},
-                default=DEFAULT_USE_TOOLS,
-            ): BooleanSelector(),
-            vol.Optional(
                 CONF_CONTEXT_THRESHOLD,
                 description={"suggested_value": options.get(CONF_CONTEXT_THRESHOLD)},
                 default=DEFAULT_CONTEXT_THRESHOLD,
             ): int,
             vol.Optional(
                 CONF_CONTEXT_TRUNCATE_STRATEGY,
-                description={
-                    "suggested_value": options.get(CONF_CONTEXT_TRUNCATE_STRATEGY)
-                },
+                description={"suggested_value": options.get(CONF_CONTEXT_TRUNCATE_STRATEGY)},
                 default=DEFAULT_CONTEXT_TRUNCATE_STRATEGY,
             ): SelectSelector(
                 SelectSelectorConfig(

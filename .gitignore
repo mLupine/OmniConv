@@ -14,3 +14,5 @@ tmp/
 pyproject.toml
 *.lock
 _ext/
+.ruff_cache/
+.venv/
