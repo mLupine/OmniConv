@@ -267,6 +267,11 @@ async def async_setup_services(hass: HomeAssistant, config: ConfigType) -> None:
 
             client = entry.runtime_data
 
+            request_params = {
+                "model": model,
+                "messages": messages,
+                "max_tokens": call.data["max_tokens"],
+            }
             if is_azure(entry.options.get("base_url", "")):
                 request_params = {
                     "deployment_id": model,  # Azure uses deployment_id instead of model
