@@ -38,7 +38,6 @@ generate_image:
           options:
             - "vivid"
             - "natural"
-
 generate_content:
   fields:
     config_entry:
@@ -59,34 +58,3 @@ generate_content:
       example: |
         - /path/to/file1.txt
         - /path/to/file2.txt
-
-query_image:
-  fields:
-    config_entry:
-      required: true
-      selector:
-        config_entry:
-          integration: omniconv
-    model:
-      example: gpt-4-vision-preview
-      selector:
-        text:
-    prompt:
-      example: "What's in this image?"
-      required: true
-      selector:
-        text:
-          multiline: true
-    images:
-      example: '{"url": "https://upload.wikimedia.org/wikipedia/commons/thumb/d/dd/Gfp-wisconsin-madison-the-nature-boardwalk.jpg/2560px-Gfp-wisconsin-madison-the-nature-boardwalk.jpg"}'
-      required: true
-      default: []
-      selector:
-        object:
-    max_tokens:
-      example: 300
-      default: 300
-      selector:
-        number:
-          min: 1
-          mode: box

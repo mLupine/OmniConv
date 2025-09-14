@@ -3,18 +3,22 @@ name = "omniconv"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = ">=3.13.2"
 dependencies = []
 
 [dependency-groups]
 dev = [
-    "homeassistant>=2025.4.0",
+    "homeassistant@git+https://github.com/home-assistant/core.git@dev",
     "voluptuous",
     "PyYAML",
     "beautifulsoup4",
     "openai",
     "python-slugify",
     "voluptuous-openapi",
+    "pytest",
+    "pytest-asyncio",
+    "hassil",
+    "home-assistant-intents",
 ]
 
 [tool.uv]
@@ -35,3 +39,7 @@ target-version = "py313"
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "PLC", "PLE", "PLW", "FLY", "RUF"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "strict"
+pythonpath = [".."]
