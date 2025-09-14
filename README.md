@@ -1,15 +1,21 @@
 # OmniConv
-This is custom component of Home Assistant.
+Custom component for Home Assistant built on the native OpenAI Conversation integration and enhanced with configurable endpoints, prompt templates, and tool controls.
 
-Derived from [Extended OpenAI Conversation](https://github.com/mLupine/OmniConv), rebased on top of the latest native [OpenAI Conversation](https://www.home-assistant.io/integrations/openai_conversation/) and enhanced with new features and configuration options.
 
 ## Additional Features
-- Ability to create new LLM Tools with YAML configuration
-- Ability to call service of Home Assistant
-- Ability to create automation
-- Ability to get data from external API or web page
-- Ability to retrieve state history of entities
-- Option to pass the current user's name to OpenAI via the user message context
+- Custom base URLs, API versions, organization support, and optional auth validation skipping
+- Custom system prompt templates with optional entity list injection
+- YAML-defined tools with configurable call limits and selectable function style
+- Finish events exposing raw LLM responses and full message history
+
+### Prompt Template Variables
+Templates can reference:
+- `exposed_entities`
+- `conversation_id`
+- `user_name`
+- `allowed_functions`
+- `states`
+
 
 ## How it works
 OmniConv uses OpenAI API's feature of [function calling](https://platform.openai.com/docs/guides/function-calling) to call service of Home Assistant.
