@@ -250,6 +250,7 @@ async def _transform_stream(
     stream: AsyncStream[ResponseStreamEvent],
 ) -> AsyncGenerator[conversation.AssistantContentDeltaDict | conversation.ToolResultContentDeltaDict]:
     """Transform an OpenAI delta stream into HA format."""
+    current_tool_call: ResponseFunctionToolCall | None = None
     last_summary_index = None
     last_role: Literal["assistant", "tool_result"] | None = None
 
@@ -350,8 +351,12 @@ async def _transform_stream(
             last_summary_index = event.summary_index
             yield {"thinking_content": event.delta}
         elif isinstance(event, ResponseFunctionCallArgumentsDeltaEvent):
+            if current_tool_call is None:
+                raise HomeAssistantError("Arguments received without active tool call")
             current_tool_call.arguments += event.delta
         elif isinstance(event, ResponseFunctionCallArgumentsDoneEvent):
+            if current_tool_call is None:
+                raise HomeAssistantError("Completion received without active tool call")
             current_tool_call.status = "completed"
             yield {
                 "tool_calls": [
@@ -362,6 +367,7 @@ async def _transform_stream(
                     )
                 ]
             }
+            current_tool_call = None
         elif isinstance(event, ResponseCompletedEvent):
             if event.response.usage is not None:
                 chat_log.async_trace(
