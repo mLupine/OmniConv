@@ -617,7 +617,7 @@ class OmniConvBaseLLMEntity(Entity):
         self.hass.bus.async_fire(
             f"{DOMAIN}.conversation.finished",
             {
-                "response": raw_response.model_dump() if raw_response else None,
+                "response": _dump_response(raw_response) if raw_response else None,
                 "messages": [
                     {
                         "role": c.role,
@@ -627,6 +627,14 @@ class OmniConvBaseLLMEntity(Entity):
                 ],
             },
         )
+
+
+def _dump_response(response: Any) -> Any:
+    if hasattr(response, "model_dump"):
+        return response.model_dump()
+    if hasattr(response, "to_dict"):
+        return response.to_dict()
+    return response
 
 
 async def async_prepare_files_for_prompt(
