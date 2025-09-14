@@ -47,9 +47,14 @@
                         "max_tokens": "Maximum tokens to return in response",
                         "temperature": "Temperature",
                         "top_p": "Top P",
+                        "enable_functions": "Enable custom functions"
+                    }
+                },
+                "functions": {
+                    "title": "Function settings",
+                    "data": {
                         "max_function_calls": "Maximum function calls",
                         "function_style": "Function invocation style",
-                        "enable_functions": "Enable custom functions",
                         "functions": "Functions"
                     }
                 },

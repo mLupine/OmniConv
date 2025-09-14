@@ -288,50 +288,25 @@ class OmniConvSubentryFlowHandler(ConfigSubentryFlow):
                 CONF_TEMPERATURE,
                 default=RECOMMENDED_TEMPERATURE,
             ): NumberSelector(NumberSelectorConfig(min=0, max=2, step=0.05)),
-            vol.Optional(
-                CONF_ENABLE_FUNCTIONS,
-                default=options.get(CONF_ENABLE_FUNCTIONS, False),
-            ): bool,
         }
 
-        if options.get(CONF_ENABLE_FUNCTIONS):
-            step_schema.update(
-                {
-                    vol.Optional(
-                        CONF_MAX_FUNCTION_CALLS,
-                        default=options.get(CONF_MAX_FUNCTION_CALLS, 10),
-                    ): int,
-                    vol.Optional(
-                        CONF_FUNCTION_STYLE,
-                        default=options.get(CONF_FUNCTION_STYLE, "tools"),
-                    ): SelectSelector(
-                        SelectSelectorConfig(
-                            options=[
-                                SelectOptionDict(label="Tools", value="tools"),
-                                SelectOptionDict(label="Functions", value="functions"),
-                            ]
-                        )
-                    ),
-                    vol.Optional(CONF_FUNCTIONS): TemplateSelector(),
-                }
-            )
+        if self._subentry_type == "conversation":
+            step_schema[
+                vol.Optional(
+                    CONF_ENABLE_FUNCTIONS,
+                    default=options.get(CONF_ENABLE_FUNCTIONS, False),
+                )
+            ] = bool
 
         if user_input is not None:
-            if user_input.get(CONF_ENABLE_FUNCTIONS):
-                if functions := user_input.get(CONF_FUNCTIONS):
-                    try:
-                        parsed = yaml.safe_load(functions) or []
-                        if not isinstance(parsed, list):
-                            raise ValueError
-                        options[CONF_FUNCTIONS] = tools.validate_configs(parsed)
-                    except Exception:
-                        errors[CONF_FUNCTIONS] = "invalid_yaml"
-            else:
-                options.pop(CONF_FUNCTIONS, None)
-                options.pop(CONF_MAX_FUNCTION_CALLS, None)
-                options.pop(CONF_FUNCTION_STYLE, None)
-
             options.update(user_input)
+            if user_input.get(CONF_ENABLE_FUNCTIONS):
+                return await self.async_step_functions()
+
+            options.pop(CONF_FUNCTIONS, None)
+            options.pop(CONF_MAX_FUNCTION_CALLS, None)
+            options.pop(CONF_FUNCTION_STYLE, None)
+
             if user_input.get(CONF_CHAT_MODEL) in UNSUPPORTED_MODELS:
                 errors[CONF_CHAT_MODEL] = "model_not_supported"
 
@@ -340,6 +315,52 @@ class OmniConvSubentryFlowHandler(ConfigSubentryFlow):
 
         return self.async_show_form(
             step_id="advanced",
+            data_schema=self.add_suggested_values_to_schema(vol.Schema(step_schema), options),
+            errors=errors,
+        )
+
+    async def async_step_functions(self, user_input: dict[str, Any] | None = None) -> SubentryFlowResult:
+        """Configure custom function settings."""
+        options = self.options
+        errors: dict[str, str] = {}
+
+        step_schema: VolDictType = {
+            vol.Optional(
+                CONF_MAX_FUNCTION_CALLS,
+                default=options.get(CONF_MAX_FUNCTION_CALLS, 10),
+            ): int,
+            vol.Optional(
+                CONF_FUNCTION_STYLE,
+                default=options.get(CONF_FUNCTION_STYLE, "tools"),
+            ): SelectSelector(
+                SelectSelectorConfig(
+                    options=[
+                        SelectOptionDict(label="Tools", value="tools"),
+                        SelectOptionDict(label="Functions", value="functions"),
+                    ]
+                )
+            ),
+            vol.Optional(CONF_FUNCTIONS): TemplateSelector(),
+        }
+
+        if user_input is not None:
+            if functions := user_input.get(CONF_FUNCTIONS):
+                try:
+                    parsed = yaml.safe_load(functions) or []
+                    if not isinstance(parsed, list):
+                        raise ValueError
+                    options[CONF_FUNCTIONS] = tools.validate_configs(parsed)
+                except Exception:
+                    errors[CONF_FUNCTIONS] = "invalid_yaml"
+            else:
+                options.pop(CONF_FUNCTIONS, None)
+
+            options.update(user_input)
+            if not errors:
+                return await self.async_step_model()
+
+        return self.async_show_form(
+            step_id="functions",
             data_schema=self.add_suggested_values_to_schema(vol.Schema(step_schema), options),
             errors=errors,
         )

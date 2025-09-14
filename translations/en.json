@@ -1,0 +1,167 @@
+{
+  "config": {
+    "error": {
+      "cannot_connect": "Unable to connect to the API",
+      "invalid_auth": "Invalid authentication data",
+      "unknown": "Unexpected error",
+      "model_not_supported": "This model is not supported",
+      "web_search_not_supported": "Web search is only supported with gpt-4o models"
+    },
+    "step": {
+      "user": {
+        "data": {
+          "name": "Name"
+        }
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "data": {
+          "api_key": "API Key",
+          "base_url": "Base URL",
+          "api_version": "API Version",
+          "organization": "Organization",
+          "skip_authentication": "Skip API Authentication",
+          "max_tokens": "Maximum tokens to return in response",
+          "model": "Completion Model",
+          "prompt": "Prompt Template",
+          "temperature": "Temperature",
+          "top_p": "Top P",
+          "max_function_calls_per_conversation": "Maximum function calls per conversation",
+          "functions": "Functions",
+          "attach_username": "Attach Username to Message",
+          "context_threshold": "Context Threshold",
+          "context_truncate_strategy": "Context truncation strategy when exceeded threshold",
+          "recommended": "Use recommended model settings",
+          "llm_hass_api": "Home Assistant API",
+          "chat_model": "AI Model",
+          "reasoning_effort": "Reasoning effort",
+          "web_search": "Enable web search",
+          "search_context_size": "Web search context size",
+          "user_location": "Use approximate location for better search results"
+        },
+        "data_description": {
+          "api_key": "Your OpenAI API key. Get yours from platform.openai.com. Only required if 'Skip API Authentication' is not enabled.",
+          "base_url": "The URL endpoint for the API. Leave empty for default OpenAI, or specify for proxies or local models.",
+          "api_version": "The API version to use, primarily relevant for Azure OpenAI deployments.",
+          "organization": "Your OpenAI organization ID (optional). Find it on your OpenAI account page.",
+          "skip_authentication": "Use this if your API endpoint (e.g., a local model) doesn't require authentication.",
+          "max_tokens": "Maximum number of tokens (roughly, words) the AI should generate in a single response. Controls response length.",
+          "model": "The specific AI model to use for generating responses (e.g., gpt-4o, gpt-4o-mini).",
+          "prompt": "A template defining the structure of the messages sent to the AI. You can customize how context and user input are presented.",
+          "temperature": "Controls creativity vs. focus (0.0-2.0). Lower values mean more predictable responses, higher values mean more varied and creative output.",
+          "top_p": "Alternative to Temperature. Controls the selection of tokens based on probability mass (0.0-1.0). Lower values narrow the choices.",
+          "max_function_calls_per_conversation": "Limits how many times the AI can use tools (functions) in one turn.",
+          "functions": "Define tools or external APIs that the AI can interact with.",
+          "attach_username": "Include the requesting Home Assistant username in the prompt sent to the AI.",
+          "context_threshold": "Maximum number of tokens to keep in the conversation history before shortening it. Larger values can increase costs and response times, while shorter values may cause the AI to lose important context.",
+          "context_truncate_strategy": "Method used to shorten conversation history when it exceeds the threshold (e.g., remove oldest messages).",
+          "recommended": "Automatically use suggested settings for the selected model.",
+          "reasoning_effort": "Adjust the AI's computational effort for reasoning; may affect response quality and latency.",
+          "web_search": "Allow the AI to access the internet to answer questions with current information.",
+          "search_context_size": "Controls how much information from web search results is provided to the AI. Larger values provide more context but increase costs and response times, while smaller values may limit the AI's understanding of search results.",
+          "user_location": "Allow the AI to use your approximate location for more relevant local results or searches."
+        }
+      }
+    }
+  },
+  "reasoning_effort": {
+    "low": "Low",
+    "medium": "Medium",
+    "high": "High"
+  },
+  "search_context_size": {
+    "low": "Less context (faster)",
+    "medium": "Balanced",
+    "high": "More context (more detailed)"
+  },
+  "services": {
+    "generate_image": {
+      "name": "Generate image",
+      "description": "Generate an image with DALL-E",
+      "fields": {
+        "config_entry": {
+          "name": "Config Entry",
+          "description": "The config entry to use for this service"
+        },
+        "prompt": {
+          "name": "Prompt",
+          "description": "Description of the image to generate"
+        },
+        "size": {
+          "name": "Size",
+          "description": "Size of the generated image"
+        },
+        "quality": {
+          "name": "Quality",
+          "description": "Quality of the generated image"
+        },
+        "style": {
+          "name": "Style",
+          "description": "Style of the generated image"
+        }
+      }
+    },
+    "generate_content": {
+      "name": "Generate content",
+      "description": "Send a prompt to the AI and get a response",
+      "fields": {
+        "config_entry": {
+          "name": "Config Entry",
+          "description": "The config entry to use for this service"
+        },
+        "prompt": {
+          "name": "Prompt",
+          "description": "The prompt to send to the AI"
+        },
+        "filenames": {
+          "name": "Files",
+          "description": "Files to include in the request (images and PDFs)"
+        }
+      }
+    },
+    "query_image": {
+      "name": "Query image",
+      "description": "Take in images and answer questions about them",
+      "fields": {
+        "config_entry": {
+          "name": "Config Entry",
+          "description": "The config entry to use for this service"
+        },
+        "model": {
+          "name": "Model",
+          "description": "The model",
+          "example": "gpt-4-vision-preview"
+        },
+        "prompt": {
+          "name": "Prompt",
+          "description": "The text to ask about image",
+          "example": "What's in this image?"
+        },
+        "images": {
+          "name": "Images",
+          "description": "A list of images that would be asked",
+          "example": "{\"url\": \"https://upload.wikimedia.org/wikipedia/commons/thumb/d/dd/Gfp-wisconsin-madison-the-nature-boardwalk.jpg/2560px-Gfp-wisconsin-madison-the-nature-boardwalk.jpg\"}"
+        },
+        "max_tokens": {
+          "name": "Max Tokens",
+          "description": "The maximum tokens",
+          "example": "300"
+        }
+      }
+    }
+  },
+  "issues": {
+    "organization_verification_required": {
+      "title": "Organization verification required",
+      "description": "Your organization must be verified to use this model. Please go to {platform_settings} and select Verify Organization. If you just verified, it can take up to 15 minutes for access to propagate."
+    }
+  },
+  "exceptions": {
+    "invalid_config_entry": {
+      "message": "Invalid config entry provided. Got {config_entry}"
+    }
+  }
+}
