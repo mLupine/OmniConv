@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Any
+from inspect import isawaitable
 
 import voluptuous as vol
 from homeassistant.core import HomeAssistant
@@ -38,4 +39,6 @@ class TemplateExecutor(ToolExecutor):
         params = self.parameters(tool_input.tool_args)
         tpl = template.Template(self._template, hass)
         result = tpl.async_render(params)
+        if isawaitable(result):
+            result = await result
         return {"result": result}

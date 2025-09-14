@@ -285,3 +285,52 @@ async def test_default_prompt(hass):
     ):
         await entity._async_handle_message(user_input, chat_log)
     assert DummyTemplate.template == llm.DEFAULT_INSTRUCTIONS_PROMPT
+
+
+@pytest.mark.asyncio
+async def test_prompt_sync_template(hass):
+    if not CONVERSATION_AVAILABLE:
+        pytest.skip("conversation dependencies missing")
+    entry = types.SimpleNamespace(subentries={}, runtime_data=None)
+    sub = types.SimpleNamespace(
+        data={CONF_PROMPT: "t", CONF_ATTACH_ENTITIES: False},
+        title="t",
+        subentry_id="1",
+        subentry_type="conversation",
+    )
+    entity = OmniConvConversationEntity(entry, sub)
+    entity.hass = hass
+    chat_log = types.SimpleNamespace(
+        async_provide_llm_data=AsyncMock(),
+        unresponded_tool_results=[],
+        content=[],
+        conversation_id="c4",
+    )
+    user_input = types.SimpleNamespace(
+        as_llm_context=lambda domain: types.SimpleNamespace(
+            platform=domain, context=None, language=None, assistant=None, device_id=None
+        ),
+        extra_system_prompt=None,
+        context=None,
+    )
+
+    class DummyTemplate:
+        def __init__(self, template, hass):
+            pass
+
+        def async_render(self, ctx):
+            DummyTemplate.context = ctx
+            return "sync"
+
+    with (
+        patch("OmniConv.prompt._get_exposed_entities", return_value={}),
+        patch("OmniConv.prompt.template.Template", DummyTemplate),
+        patch("homeassistant.components.conversation.async_get_result_from_chat_log", return_value=None),
+        patch.object(entity, "_async_handle_chat_log", AsyncMock()),
+    ):
+        await entity._async_handle_message(user_input, chat_log)
+    chat_log.async_provide_llm_data.assert_called_once()
+    args = chat_log.async_provide_llm_data.call_args[0]
+    assert args[2] == "sync"
+    ctx = DummyTemplate.context
+    assert ctx["conversation_id"] == "c4"

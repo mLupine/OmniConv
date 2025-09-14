@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Any
+from inspect import isawaitable
 
 from homeassistant.components import conversation
 from homeassistant.core import HomeAssistant
@@ -23,4 +24,7 @@ async def async_render_prompt(
         "allowed_functions": [f["name"] for f in options.get(CONF_FUNCTIONS, [])],
         "states": hass.states,
     }
-    return await tmpl.async_render(context)
+    rendered = tmpl.async_render(context)
+    if isawaitable(rendered):
+        return await rendered
+    return rendered
