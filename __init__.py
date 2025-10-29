@@ -2,41 +2,34 @@
 
 from __future__ import annotations
 
-import base64
-from mimetypes import guess_type
+from types import MappingProxyType
 
 import openai
-from homeassistant.config_entries import ConfigEntry
+from homeassistant.config_entries import ConfigEntry, ConfigSubentry
 from homeassistant.const import CONF_API_KEY, Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers.httpx_client import get_async_client
 from homeassistant.helpers.typing import ConfigType
 
-from .api import async_setup_api
 from .const import (
     CONF_BASE_URL,
     CONF_ORGANIZATION,
     CONF_SKIP_AUTHENTICATION,
+    DEFAULT_AI_TASK_NAME,
     DEFAULT_CONF_BASE_URL,
+    DEFAULT_CONVERSATION_NAME,
+    DEFAULT_NAME,
     DEFAULT_SKIP_AUTHENTICATION,
     LOGGER,
+    RECOMMENDED_AI_TASK_OPTIONS,
 )
 from .helpers import is_azure
 from .services import async_setup_services
 
-PLATFORMS = (Platform.CONVERSATION,)
+PLATFORMS = (Platform.AI_TASK, Platform.CONVERSATION)
 
 type OmniConvConfigEntry = ConfigEntry[openai.AsyncClient]
-
-
-def encode_file(file_path: str) -> tuple[str, str]:
-    """Return base64 version of file contents."""
-    mime_type, _ = guess_type(file_path)
-    if mime_type is None:
-        mime_type = "application/octet-stream"
-    with open(file_path, "rb") as image_file:
-        return (mime_type, base64.b64encode(image_file.read()).decode("utf-8"))
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
@@ -47,38 +40,34 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
 
 async def async_setup_entry(hass: HomeAssistant, entry: OmniConvConfigEntry) -> bool:
     """Set up OmniConv from a config entry."""
-    base_url = entry.options.get(CONF_BASE_URL, DEFAULT_CONF_BASE_URL)
-    skip_authentication = entry.options.get(CONF_SKIP_AUTHENTICATION, DEFAULT_SKIP_AUTHENTICATION)
-    organization = entry.options.get(CONF_ORGANIZATION)
-
-    _ = await async_setup_api(hass, entry)
+    base_url = entry.data.get(CONF_BASE_URL, DEFAULT_CONF_BASE_URL)
+    skip_authentication = entry.data.get(CONF_SKIP_AUTHENTICATION, DEFAULT_SKIP_AUTHENTICATION)
+    organization = entry.data.get(CONF_ORGANIZATION)
+    api_key = entry.data.get(CONF_API_KEY, "-")
 
     if is_azure(base_url):
-        from openai import AzureOpenAI
+        from openai import AsyncAzureOpenAI
 
-        client = AzureOpenAI(
-            api_key=entry.options.get(CONF_API_KEY, "-"),
+        client = AsyncAzureOpenAI(
+            api_key=api_key,
             azure_endpoint=base_url,
-            api_version=entry.options.get("api_version", "2023-12-01-preview"),
+            api_version=entry.data.get("api_version", "2023-12-01-preview"),
             organization=organization,
             http_client=get_async_client(hass),
         )
     else:
         client = openai.AsyncOpenAI(
-            api_key=entry.options.get(CONF_API_KEY, "-"),
+            api_key=api_key,
             base_url=base_url,
             organization=organization,
             http_client=get_async_client(hass),
         )
 
-    # Cache current platform data which gets added to each request (caching done by library)
     _ = await hass.async_add_executor_job(client.platform_headers)
 
-    # Skip authentication if configured to do so (useful for running against local inference servers)
     if not skip_authentication:
         try:
             if is_azure(base_url):
-                # Azure API doesn't have models.list, so we just verify we can connect
                 await client.with_options(timeout=10.0).deployments.list()
             else:
                 await hass.async_add_executor_job(client.with_options(timeout=10.0).models.list)
@@ -92,9 +81,54 @@ async def async_setup_entry(hass: HomeAssistant, entry: OmniConvConfigEntry) -> 
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
+    entry.async_on_unload(entry.add_update_listener(async_update_options))
+
     return True
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Unload OpenAI."""
+    """Unload OmniConv."""
     return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+
+
+async def async_update_options(hass: HomeAssistant, entry: OmniConvConfigEntry) -> None:
+    """Update options."""
+    await hass.config_entries.async_reload(entry.entry_id)
+
+
+async def async_migrate_entry(hass: HomeAssistant, entry: OmniConvConfigEntry) -> bool:
+    """Migrate entry."""
+    LOGGER.debug("Migrating from version %s:%s", entry.version, entry.minor_version)
+
+    if entry.version > 2:
+        return False
+
+    if entry.version == 1:
+        new_data = entry.data.copy()
+        conversation_subentry = ConfigSubentry(
+            data=MappingProxyType(entry.options),
+            subentry_type="conversation",
+            title=entry.title or DEFAULT_CONVERSATION_NAME,
+            unique_id=None,
+        )
+        ai_task_subentry = ConfigSubentry(
+            data=MappingProxyType(RECOMMENDED_AI_TASK_OPTIONS),
+            subentry_type="ai_task_data",
+            title=DEFAULT_AI_TASK_NAME,
+            unique_id=None,
+        )
+
+        hass.config_entries.async_update_entry(
+            entry,
+            data=new_data,
+            options={},
+            title=DEFAULT_NAME,
+            version=2,
+            minor_version=1,
+        )
+        hass.config_entries.async_add_subentry(entry, conversation_subentry)
+        hass.config_entries.async_add_subentry(entry, ai_task_subentry)
+
+    LOGGER.debug("Migration to version %s:%s successful", entry.version, entry.minor_version)
+
+    return True

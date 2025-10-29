@@ -4,18 +4,28 @@ from __future__ import annotations
 
 import json
 import logging
-import types
-from types import MappingProxyType
 from typing import Any
 
 import openai
 import voluptuous as vol
 import yaml
-from homeassistant import config_entries
 from homeassistant.components.zone import ENTITY_ID_HOME
-from homeassistant.const import ATTR_LATITUDE, ATTR_LONGITUDE, CONF_API_KEY, CONF_NAME
-from homeassistant.core import HomeAssistant
-from homeassistant.data_entry_flow import FlowResult
+from homeassistant.config_entries import (
+    ConfigEntry,
+    ConfigEntryState,
+    ConfigFlow,
+    ConfigFlowResult,
+    ConfigSubentryFlow,
+    SubentryFlowResult,
+)
+from homeassistant.const import (
+    ATTR_LATITUDE,
+    ATTR_LONGITUDE,
+    CONF_API_KEY,
+    CONF_LLM_HASS_API,
+    CONF_NAME,
+)
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import llm
 from homeassistant.helpers.httpx_client import get_async_client
 from homeassistant.helpers.selector import (
@@ -28,7 +38,7 @@ from homeassistant.helpers.selector import (
     SelectSelectorMode,
     TemplateSelector,
 )
-from openai._exceptions import APIConnectionError, AuthenticationError
+from homeassistant.helpers.typing import VolDictType
 from voluptuous_openapi import convert
 
 from .const import (
@@ -36,18 +46,22 @@ from .const import (
     CONF_ATTACH_USERNAME,
     CONF_BASE_URL,
     CONF_CHAT_MODEL,
+    CONF_CODE_INTERPRETER,
     CONF_CONTEXT_THRESHOLD,
     CONF_CONTEXT_TRUNCATE_STRATEGY,
     CONF_ENTITIES_PROMPT,
     CONF_FUNCTIONS,
+    CONF_IMAGE_MODEL,
     CONF_MAX_FUNCTION_CALLS_PER_CONVERSATION,
     CONF_MAX_TOKENS,
     CONF_ORGANIZATION,
     CONF_PROMPT,
     CONF_REASONING_EFFORT,
+    CONF_RECOMMENDED,
     CONF_SKIP_AUTHENTICATION,
     CONF_TEMPERATURE,
     CONF_TOP_P,
+    CONF_VERBOSITY,
     CONF_WEB_SEARCH,
     CONF_WEB_SEARCH_CITY,
     CONF_WEB_SEARCH_CONTEXT_SIZE,
@@ -56,69 +70,55 @@ from .const import (
     CONF_WEB_SEARCH_TIMEZONE,
     CONF_WEB_SEARCH_USER_LOCATION,
     CONTEXT_TRUNCATE_STRATEGIES,
+    DEFAULT_AI_TASK_NAME,
     DEFAULT_ATTACH_USERNAME,
-    DEFAULT_CHAT_MODEL,
     DEFAULT_CONF_BASE_URL,
     DEFAULT_CONF_FUNCTIONS,
     DEFAULT_CONTEXT_THRESHOLD,
     DEFAULT_CONTEXT_TRUNCATE_STRATEGY,
+    DEFAULT_CONVERSATION_NAME,
     DEFAULT_ENTITIES_PROMPT,
     DEFAULT_MAX_FUNCTION_CALLS_PER_CONVERSATION,
-    DEFAULT_MAX_TOKENS,
-    DEFAULT_NAME,
-    DEFAULT_PROMPT,
     DEFAULT_SKIP_AUTHENTICATION,
-    DEFAULT_TEMPERATURE,
-    DEFAULT_TOP_P,
     DOMAIN,
+    RECOMMENDED_AI_TASK_OPTIONS,
     RECOMMENDED_CHAT_MODEL,
+    RECOMMENDED_CODE_INTERPRETER,
+    RECOMMENDED_CONVERSATION_OPTIONS,
+    RECOMMENDED_IMAGE_MODEL,
     RECOMMENDED_MAX_TOKENS,
     RECOMMENDED_REASONING_EFFORT,
     RECOMMENDED_TEMPERATURE,
     RECOMMENDED_TOP_P,
+    RECOMMENDED_VERBOSITY,
     RECOMMENDED_WEB_SEARCH,
     RECOMMENDED_WEB_SEARCH_CONTEXT_SIZE,
     RECOMMENDED_WEB_SEARCH_USER_LOCATION,
+    UNSUPPORTED_IMAGE_MODELS,
     UNSUPPORTED_MODELS,
+    UNSUPPORTED_WEB_SEARCH_MODELS,
 )
 from .helpers import is_azure, validate_authentication
 
 _LOGGER = logging.getLogger(__name__)
 
-STEP_USER_DATA_SCHEMA = vol.Schema(
-    {
-        vol.Optional(CONF_NAME): str,
-    }
-)
-
 DEFAULT_CONF_FUNCTIONS_STR = yaml.dump(DEFAULT_CONF_FUNCTIONS, sort_keys=False)
 
-DEFAULT_OPTIONS = types.MappingProxyType(
+STEP_USER_DATA_SCHEMA = vol.Schema(
     {
-        CONF_PROMPT: DEFAULT_PROMPT,
-        CONF_ENTITIES_PROMPT: DEFAULT_ENTITIES_PROMPT,
-        CONF_CHAT_MODEL: DEFAULT_CHAT_MODEL,
-        CONF_MAX_TOKENS: DEFAULT_MAX_TOKENS,
-        CONF_MAX_FUNCTION_CALLS_PER_CONVERSATION: DEFAULT_MAX_FUNCTION_CALLS_PER_CONVERSATION,
-        CONF_TOP_P: DEFAULT_TOP_P,
-        CONF_TEMPERATURE: DEFAULT_TEMPERATURE,
-        CONF_FUNCTIONS: DEFAULT_CONF_FUNCTIONS_STR,
-        CONF_ATTACH_USERNAME: DEFAULT_ATTACH_USERNAME,
-        CONF_CONTEXT_THRESHOLD: DEFAULT_CONTEXT_THRESHOLD,
-        CONF_CONTEXT_TRUNCATE_STRATEGY: DEFAULT_CONTEXT_TRUNCATE_STRATEGY,
+        vol.Optional(CONF_SKIP_AUTHENTICATION, default=DEFAULT_SKIP_AUTHENTICATION): bool,
+        vol.Optional(CONF_API_KEY): str,
+        vol.Optional(CONF_BASE_URL, default=DEFAULT_CONF_BASE_URL): str,
+        vol.Optional(CONF_API_VERSION): str,
+        vol.Optional(CONF_ORGANIZATION): str,
     }
 )
 
-DEFAULT_INTEGRATION_OPTIONS = {
-    CONF_PROMPT: llm.DEFAULT_INSTRUCTIONS_PROMPT,
-    CONF_ENTITIES_PROMPT: DEFAULT_ENTITIES_PROMPT,
-}
 
+async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> None:
+    """Validate the user input allows us to connect.
 
-async def validate_options(hass: HomeAssistant, data: dict[str, Any]) -> None:
-    """Validate the options input allows us to connect.
-
-    Data has the API keys and connection details from the options form.
+    Data has the keys from STEP_USER_DATA_SCHEMA with values provided by the user.
     """
     skip_authentication = data.get(CONF_SKIP_AUTHENTICATION, DEFAULT_SKIP_AUTHENTICATION)
 
@@ -129,9 +129,7 @@ async def validate_options(hass: HomeAssistant, data: dict[str, Any]) -> None:
         organization = data.get(CONF_ORGANIZATION)
 
         if base_url == DEFAULT_CONF_BASE_URL:
-            # Do not set base_url if using OpenAI for case of OpenAI's base_url change
             base_url = None
-            data.pop(CONF_BASE_URL, None)
 
         await validate_authentication(
             hass=hass,
@@ -143,119 +141,389 @@ async def validate_options(hass: HomeAssistant, data: dict[str, Any]) -> None:
         )
 
 
-class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
+class OmniConvConfigFlow(ConfigFlow, domain=DOMAIN):
     """Handle a config flow for OmniConv."""
 
-    VERSION = 1
+    VERSION = 2
+    MINOR_VERSION = 1
 
-    async def async_step_user(self, user_input: dict[str, Any] | None = None) -> FlowResult:
+    async def async_step_user(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         """Handle the initial step."""
         if user_input is None:
             return self.async_show_form(step_id="user", data_schema=STEP_USER_DATA_SCHEMA)
 
-        options = dict(DEFAULT_INTEGRATION_OPTIONS)
-
-        data = {CONF_NAME: user_input.get(CONF_NAME, DEFAULT_NAME)}
-
-        return self.async_create_entry(
-            title=data[CONF_NAME],
-            data=data,
-            options=options,
-        )
-
-    @staticmethod
-    def async_get_options_flow(
-        config_entry: config_entries.ConfigEntry,
-    ) -> config_entries.OptionsFlow:
-        """Create the options flow."""
-        return OptionsFlow(config_entry)
-
-
-class OptionsFlow(config_entries.OptionsFlow):
-    """OpenAI config flow options handler."""
-
-    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
-        """Initialize options flow."""
-        self.config_entry = config_entry
-
-    async def async_step_init(self, user_input: dict[str, Any] | None = None) -> FlowResult:
-        """Manage the options."""
-        options: dict[str, Any] | MappingProxyType[str, Any] = self.config_entry.options
         errors: dict[str, str] = {}
 
-        if user_input is not None:
-            current_skip_auth = options.get(CONF_SKIP_AUTHENTICATION, DEFAULT_SKIP_AUTHENTICATION)
-            new_skip_auth = user_input.get(CONF_SKIP_AUTHENTICATION, DEFAULT_SKIP_AUTHENTICATION)
-            rerender_form = current_skip_auth != new_skip_auth
+        self._async_abort_entries_match({k: v for k, v in user_input.items() if k == CONF_API_KEY})
+        try:
+            await validate_input(self.hass, user_input)
+        except openai.APIConnectionError:
+            errors["base"] = "cannot_connect"
+        except openai.AuthenticationError:
+            errors["base"] = "invalid_auth"
+        except Exception:
+            _LOGGER.exception("Unexpected exception")
+            errors["base"] = "unknown"
+        else:
+            return self.async_create_entry(
+                title="OmniConv",
+                data=user_input,
+                subentries=[
+                    {
+                        "subentry_type": "conversation",
+                        "data": RECOMMENDED_CONVERSATION_OPTIONS,
+                        "title": DEFAULT_CONVERSATION_NAME,
+                        "unique_id": None,
+                    },
+                    {
+                        "subentry_type": "ai_task_data",
+                        "data": RECOMMENDED_AI_TASK_OPTIONS,
+                        "title": DEFAULT_AI_TASK_NAME,
+                        "unique_id": None,
+                    },
+                ],
+            )
 
-            if not rerender_form:
-                if user_input.get(CONF_CHAT_MODEL) in UNSUPPORTED_MODELS:
-                    errors[CONF_CHAT_MODEL] = "model_not_supported"
+        return self.async_show_form(step_id="user", data_schema=STEP_USER_DATA_SCHEMA, errors=errors)
 
-                try:
-                    if CONF_API_KEY in user_input:
-                        await validate_options(self.hass, user_input)
-                except APIConnectionError:
-                    errors["base"] = "cannot_connect"
-                except AuthenticationError:
-                    errors["base"] = "invalid_auth"
-                except Exception:  # pylint: disable=broad-except
-                    _LOGGER.exception("Unexpected exception")
-                    errors["base"] = "unknown"
+    @classmethod
+    @callback
+    def async_get_supported_subentry_types(cls, config_entry: ConfigEntry) -> dict[str, type[ConfigSubentryFlow]]:
+        """Return subentries supported by this integration."""
+        return {
+            "conversation": OmniConvSubentryFlowHandler,
+            "ai_task_data": OmniConvSubentryFlowHandler,
+        }
 
-                if user_input.get(CONF_WEB_SEARCH) and user_input.get(CONF_WEB_SEARCH_USER_LOCATION):
-                    user_input.update(
-                        await self.get_location_data(
-                            api_key=user_input.get(CONF_API_KEY),
-                            base_url=user_input.get(CONF_BASE_URL),
-                            organization=user_input.get(CONF_ORGANIZATION),
-                        )
-                    )
 
-                if not errors:
-                    # If functions are provided as a string, validate they're a proper YAML structure
-                    if CONF_FUNCTIONS in user_input and isinstance(user_input[CONF_FUNCTIONS], str):
-                        try:
-                            yaml.safe_load(user_input[CONF_FUNCTIONS])
-                        except yaml.YAMLError as err:
-                            errors[CONF_FUNCTIONS] = f"Invalid YAML: {err}"
+class OmniConvSubentryFlowHandler(ConfigSubentryFlow):
+    """Flow for managing OmniConv subentries."""
 
-                if not errors:
-                    return self.async_create_entry(title="", data=user_input)
+    last_rendered_recommended = False
+    options: dict[str, Any]
+
+    @property
+    def _is_new(self) -> bool:
+        """Return if this is a new subentry."""
+        return self.source == "user"
+
+    async def async_step_user(self, user_input: dict[str, Any] | None = None) -> SubentryFlowResult:
+        """Add a subentry."""
+        if self._subentry_type == "ai_task_data":
+            self.options = RECOMMENDED_AI_TASK_OPTIONS.copy()
+        else:
+            self.options = RECOMMENDED_CONVERSATION_OPTIONS.copy()
+        return await self.async_step_init()
+
+    async def async_step_reconfigure(self, user_input: dict[str, Any] | None = None) -> SubentryFlowResult:
+        """Handle reconfiguration of a subentry."""
+        self.options = self._get_reconfigure_subentry().data.copy()
+        return await self.async_step_init()
+
+    async def async_step_init(self, user_input: dict[str, Any] | None = None) -> SubentryFlowResult:
+        """Manage initial options."""
+        if self._get_entry().state != ConfigEntryState.LOADED:
+            return self.async_abort(reason="entry_not_loaded")
+
+        options = self.options
+
+        hass_apis: list[SelectOptionDict] = [
+            SelectOptionDict(
+                label=api.name,
+                value=api.id,
+            )
+            for api in llm.async_get_apis(self.hass)
+        ]
+        if (suggested_llm_apis := options.get(CONF_LLM_HASS_API)) and isinstance(suggested_llm_apis, str):
+            options[CONF_LLM_HASS_API] = [suggested_llm_apis]
+
+        step_schema: VolDictType = {}
+
+        if self._is_new:
+            if self._subentry_type == "ai_task_data":
+                default_name = DEFAULT_AI_TASK_NAME
             else:
-                options = {
-                    CONF_PROMPT: user_input[CONF_PROMPT],
-                    CONF_ENTITIES_PROMPT: user_input[CONF_ENTITIES_PROMPT],
+                default_name = DEFAULT_CONVERSATION_NAME
+            step_schema[vol.Required(CONF_NAME, default=default_name)] = str
+
+        if self._subentry_type == "conversation":
+            step_schema.update(
+                {
+                    vol.Optional(
+                        CONF_PROMPT,
+                        description={"suggested_value": options.get(CONF_PROMPT, llm.DEFAULT_INSTRUCTIONS_PROMPT)},
+                    ): TemplateSelector(),
+                    vol.Optional(
+                        CONF_ENTITIES_PROMPT,
+                        description={"suggested_value": options.get(CONF_ENTITIES_PROMPT, DEFAULT_ENTITIES_PROMPT)},
+                    ): TemplateSelector(),
+                    vol.Optional(CONF_LLM_HASS_API): SelectSelector(
+                        SelectSelectorConfig(options=hass_apis, multiple=True)
+                    ),
                 }
+            )
 
-                if CONF_SKIP_AUTHENTICATION in user_input:
-                    options[CONF_SKIP_AUTHENTICATION] = user_input[CONF_SKIP_AUTHENTICATION]
+        step_schema[vol.Required(CONF_RECOMMENDED, default=options.get(CONF_RECOMMENDED, False))] = bool
 
-        schema = openai_config_option_schema(self.hass, options)
+        if user_input is not None:
+            if not user_input.get(CONF_LLM_HASS_API):
+                user_input.pop(CONF_LLM_HASS_API, None)
+
+            if user_input[CONF_RECOMMENDED]:
+                if self._is_new:
+                    return self.async_create_entry(
+                        title=user_input.pop(CONF_NAME),
+                        data=user_input,
+                    )
+                return self.async_update_and_abort(
+                    self._get_entry(),
+                    self._get_reconfigure_subentry(),
+                    data=user_input,
+                )
+
+            options.update(user_input)
+            if CONF_LLM_HASS_API in options and CONF_LLM_HASS_API not in user_input:
+                options.pop(CONF_LLM_HASS_API)
+            return await self.async_step_advanced()
+
         return self.async_show_form(
             step_id="init",
-            data_schema=vol.Schema(schema),
+            data_schema=self.add_suggested_values_to_schema(vol.Schema(step_schema), options),
+        )
+
+    async def async_step_advanced(self, user_input: dict[str, Any] | None = None) -> SubentryFlowResult:
+        """Manage advanced options."""
+        options = self.options
+        errors: dict[str, str] = {}
+
+        step_schema: VolDictType = {
+            vol.Optional(
+                CONF_CHAT_MODEL,
+                default=RECOMMENDED_CHAT_MODEL,
+            ): str,
+            vol.Optional(
+                CONF_MAX_TOKENS,
+                default=RECOMMENDED_MAX_TOKENS,
+            ): int,
+            vol.Optional(
+                CONF_TOP_P,
+                default=RECOMMENDED_TOP_P,
+            ): NumberSelector(NumberSelectorConfig(min=0, max=1, step=0.05)),
+            vol.Optional(
+                CONF_TEMPERATURE,
+                default=RECOMMENDED_TEMPERATURE,
+            ): NumberSelector(NumberSelectorConfig(min=0, max=2, step=0.05)),
+        }
+
+        if user_input is not None:
+            options.update(user_input)
+            if user_input.get(CONF_CHAT_MODEL) in UNSUPPORTED_MODELS:
+                errors[CONF_CHAT_MODEL] = "model_not_supported"
+
+            if not errors:
+                return await self.async_step_model()
+
+        return self.async_show_form(
+            step_id="advanced",
+            data_schema=self.add_suggested_values_to_schema(vol.Schema(step_schema), options),
             errors=errors,
         )
 
-    async def get_location_data(
-        self,
-        api_key: str | None,
-        base_url: str | None,
-        organization: str | None,
-    ) -> dict[str, str]:
+    async def async_step_model(self, user_input: dict[str, Any] | None = None) -> SubentryFlowResult:
+        """Manage model-specific options."""
+        options = self.options
+        errors: dict[str, str] = {}
+
+        step_schema: VolDictType = {}
+
+        model = options[CONF_CHAT_MODEL]
+
+        if not model.startswith(("gpt-5-pro", "gpt-5-codex")):
+            step_schema.update(
+                {
+                    vol.Optional(
+                        CONF_CODE_INTERPRETER,
+                        default=RECOMMENDED_CODE_INTERPRETER,
+                    ): bool,
+                }
+            )
+        elif CONF_CODE_INTERPRETER in options:
+            options.pop(CONF_CODE_INTERPRETER)
+
+        if model.startswith(("o", "gpt-5")) and not model.startswith("gpt-5-pro"):
+            step_schema.update(
+                {
+                    vol.Optional(
+                        CONF_REASONING_EFFORT,
+                        default=RECOMMENDED_REASONING_EFFORT,
+                    ): SelectSelector(
+                        SelectSelectorConfig(
+                            options=(
+                                ["low", "medium", "high"]
+                                if model.startswith("o")
+                                else ["minimal", "low", "medium", "high"]
+                            ),
+                            translation_key=CONF_REASONING_EFFORT,
+                            mode=SelectSelectorMode.DROPDOWN,
+                        )
+                    ),
+                }
+            )
+        elif CONF_REASONING_EFFORT in options:
+            options.pop(CONF_REASONING_EFFORT)
+
+        if model.startswith("gpt-5"):
+            step_schema.update(
+                {
+                    vol.Optional(
+                        CONF_VERBOSITY,
+                        default=RECOMMENDED_VERBOSITY,
+                    ): SelectSelector(
+                        SelectSelectorConfig(
+                            options=["low", "medium", "high"],
+                            translation_key=CONF_VERBOSITY,
+                            mode=SelectSelectorMode.DROPDOWN,
+                        )
+                    ),
+                }
+            )
+        elif CONF_VERBOSITY in options:
+            options.pop(CONF_VERBOSITY)
+
+        if self._subentry_type == "conversation":
+            if not model.startswith(tuple(UNSUPPORTED_WEB_SEARCH_MODELS)):
+                step_schema.update(
+                    {
+                        vol.Optional(
+                            CONF_WEB_SEARCH,
+                            default=RECOMMENDED_WEB_SEARCH,
+                        ): bool,
+                        vol.Optional(
+                            CONF_WEB_SEARCH_CONTEXT_SIZE,
+                            default=RECOMMENDED_WEB_SEARCH_CONTEXT_SIZE,
+                        ): SelectSelector(
+                            SelectSelectorConfig(
+                                options=["low", "medium", "high"],
+                                translation_key=CONF_WEB_SEARCH_CONTEXT_SIZE,
+                                mode=SelectSelectorMode.DROPDOWN,
+                            )
+                        ),
+                        vol.Optional(
+                            CONF_WEB_SEARCH_USER_LOCATION,
+                            default=RECOMMENDED_WEB_SEARCH_USER_LOCATION,
+                        ): bool,
+                    }
+                )
+            elif CONF_WEB_SEARCH in options:
+                options = {
+                    k: v
+                    for k, v in options.items()
+                    if k
+                    not in (
+                        CONF_WEB_SEARCH,
+                        CONF_WEB_SEARCH_CONTEXT_SIZE,
+                        CONF_WEB_SEARCH_USER_LOCATION,
+                        CONF_WEB_SEARCH_CITY,
+                        CONF_WEB_SEARCH_REGION,
+                        CONF_WEB_SEARCH_COUNTRY,
+                        CONF_WEB_SEARCH_TIMEZONE,
+                    )
+                }
+
+            step_schema.update(
+                {
+                    vol.Optional(
+                        CONF_FUNCTIONS,
+                        default=DEFAULT_CONF_FUNCTIONS_STR,
+                    ): TemplateSelector(),
+                    vol.Optional(
+                        CONF_MAX_FUNCTION_CALLS_PER_CONVERSATION,
+                        default=DEFAULT_MAX_FUNCTION_CALLS_PER_CONVERSATION,
+                    ): int,
+                    vol.Optional(
+                        CONF_ATTACH_USERNAME,
+                        default=DEFAULT_ATTACH_USERNAME,
+                    ): BooleanSelector(),
+                    vol.Optional(
+                        CONF_CONTEXT_THRESHOLD,
+                        default=DEFAULT_CONTEXT_THRESHOLD,
+                    ): int,
+                    vol.Optional(
+                        CONF_CONTEXT_TRUNCATE_STRATEGY,
+                        default=DEFAULT_CONTEXT_TRUNCATE_STRATEGY,
+                    ): SelectSelector(
+                        SelectSelectorConfig(
+                            options=[
+                                SelectOptionDict(value=strategy["key"], label=strategy["label"])
+                                for strategy in CONTEXT_TRUNCATE_STRATEGIES
+                            ],
+                            mode=SelectSelectorMode.DROPDOWN,
+                        )
+                    ),
+                }
+            )
+
+        if self._subentry_type == "ai_task_data" and not model.startswith(tuple(UNSUPPORTED_IMAGE_MODELS)):
+            step_schema[vol.Optional(CONF_IMAGE_MODEL, default=RECOMMENDED_IMAGE_MODEL)] = SelectSelector(
+                SelectSelectorConfig(
+                    options=["gpt-image-1", "gpt-image-1-mini"],
+                    mode=SelectSelectorMode.DROPDOWN,
+                )
+            )
+
+        if user_input is not None:
+            if user_input.get(CONF_WEB_SEARCH):
+                if user_input.get(CONF_REASONING_EFFORT) == "minimal":
+                    errors[CONF_WEB_SEARCH] = "web_search_minimal_reasoning"
+                if user_input.get(CONF_WEB_SEARCH_USER_LOCATION) and not errors:
+                    user_input.update(await self._get_location_data())
+                else:
+                    options.pop(CONF_WEB_SEARCH_CITY, None)
+                    options.pop(CONF_WEB_SEARCH_REGION, None)
+                    options.pop(CONF_WEB_SEARCH_COUNTRY, None)
+                    options.pop(CONF_WEB_SEARCH_TIMEZONE, None)
+
+            if CONF_FUNCTIONS in user_input and isinstance(user_input[CONF_FUNCTIONS], str):
+                try:
+                    yaml.safe_load(user_input[CONF_FUNCTIONS])
+                except yaml.YAMLError as err:
+                    errors[CONF_FUNCTIONS] = f"Invalid YAML: {err}"
+
+            options.update(user_input)
+            if not errors:
+                if self._is_new:
+                    return self.async_create_entry(
+                        title=options.pop(CONF_NAME),
+                        data=options,
+                    )
+                return self.async_update_and_abort(
+                    self._get_entry(),
+                    self._get_reconfigure_subentry(),
+                    data=options,
+                )
+
+        return self.async_show_form(
+            step_id="model",
+            data_schema=self.add_suggested_values_to_schema(vol.Schema(step_schema), options),
+            errors=errors,
+        )
+
+    async def _get_location_data(self) -> dict[str, str]:
         """Get approximate location data of the user."""
         location_data: dict[str, str] = {}
         zone_home = self.hass.states.get(ENTITY_ID_HOME)
+        entry_data = self._get_entry().data
+
         if zone_home is not None:
-            effective_base_url = base_url or DEFAULT_CONF_BASE_URL
+            effective_base_url = entry_data.get(CONF_BASE_URL, DEFAULT_CONF_BASE_URL)
             if is_azure(effective_base_url):
                 _LOGGER.debug("Skipping location detection with Azure OpenAI")
-            elif api_key:
+            elif CONF_API_KEY in entry_data:
+                base_url = effective_base_url if effective_base_url != DEFAULT_CONF_BASE_URL else None
                 client = openai.AsyncOpenAI(
-                    api_key=api_key,
-                    base_url=(effective_base_url if effective_base_url != DEFAULT_CONF_BASE_URL else None),
-                    organization=organization,
+                    api_key=entry_data[CONF_API_KEY],
+                    base_url=base_url,
+                    organization=entry_data.get(CONF_ORGANIZATION),
                     http_client=get_async_client(self.hass),
                 )
                 location_schema = vol.Schema(
@@ -302,141 +570,3 @@ class OptionsFlow(config_entries.OptionsFlow):
         _LOGGER.debug("Location data: %s", location_data)
 
         return location_data
-
-
-def openai_config_option_schema(
-    hass: HomeAssistant,
-    options: dict[str, Any] | MappingProxyType[str, Any],
-) -> dict:
-    """Return a schema for OpenAI completion options."""
-    skip_auth = options.get(CONF_SKIP_AUTHENTICATION, DEFAULT_SKIP_AUTHENTICATION)
-
-    schema: dict = {
-        vol.Optional(CONF_SKIP_AUTHENTICATION, default=DEFAULT_SKIP_AUTHENTICATION): bool,
-    }
-
-    api_key_options = dict(
-        description={"suggested_value": options.get(CONF_API_KEY)},
-    )
-    if not skip_auth:
-        schema[vol.Required(CONF_API_KEY, **api_key_options)] = str
-    else:
-        schema[vol.Optional(CONF_API_KEY, **api_key_options)] = str
-
-    schema.update(
-        {
-            vol.Optional(
-                CONF_BASE_URL,
-                default=DEFAULT_CONF_BASE_URL,
-                description={"suggested_value": options.get(CONF_BASE_URL, llm.DEFAULT_INSTRUCTIONS_PROMPT)},
-            ): str,
-            vol.Optional(
-                CONF_API_VERSION,
-                description={"suggested_value": options.get(CONF_API_VERSION)},
-            ): str,
-            vol.Optional(
-                CONF_ORGANIZATION,
-                description={"suggested_value": options.get(CONF_ORGANIZATION)},
-            ): str,
-            vol.Optional(
-                CONF_PROMPT,
-                description={"suggested_value": options.get(CONF_PROMPT)},
-            ): TemplateSelector(),
-            vol.Optional(
-                CONF_ENTITIES_PROMPT,
-                description={"suggested_value": options.get(CONF_ENTITIES_PROMPT, DEFAULT_ENTITIES_PROMPT)},
-            ): TemplateSelector(),
-        }
-    )
-
-    schema.update(
-        {
-            vol.Optional(
-                CONF_CHAT_MODEL,
-                description={"suggested_value": options.get(CONF_CHAT_MODEL)},
-                default=RECOMMENDED_CHAT_MODEL,
-            ): str,
-            vol.Optional(
-                CONF_MAX_TOKENS,
-                description={"suggested_value": options.get(CONF_MAX_TOKENS)},
-                default=RECOMMENDED_MAX_TOKENS,
-            ): int,
-            vol.Optional(
-                CONF_TOP_P,
-                description={"suggested_value": options.get(CONF_TOP_P)},
-                default=RECOMMENDED_TOP_P,
-            ): NumberSelector(NumberSelectorConfig(min=0, max=1, step=0.05)),
-            vol.Optional(
-                CONF_TEMPERATURE,
-                description={"suggested_value": options.get(CONF_TEMPERATURE)},
-                default=RECOMMENDED_TEMPERATURE,
-            ): NumberSelector(NumberSelectorConfig(min=0, max=2, step=0.05)),
-            vol.Optional(
-                CONF_REASONING_EFFORT,
-                description={"suggested_value": options.get(CONF_REASONING_EFFORT)},
-                default=RECOMMENDED_REASONING_EFFORT,
-            ): SelectSelector(
-                SelectSelectorConfig(
-                    options=["low", "medium", "high"],
-                    translation_key=CONF_REASONING_EFFORT,
-                    mode=SelectSelectorMode.DROPDOWN,
-                )
-            ),
-            vol.Optional(
-                CONF_WEB_SEARCH,
-                description={"suggested_value": options.get(CONF_WEB_SEARCH)},
-                default=RECOMMENDED_WEB_SEARCH,
-            ): bool,
-            vol.Optional(
-                CONF_WEB_SEARCH_CONTEXT_SIZE,
-                description={"suggested_value": options.get(CONF_WEB_SEARCH_CONTEXT_SIZE)},
-                default=RECOMMENDED_WEB_SEARCH_CONTEXT_SIZE,
-            ): SelectSelector(
-                SelectSelectorConfig(
-                    options=["low", "medium", "high"],
-                    translation_key=CONF_WEB_SEARCH_CONTEXT_SIZE,
-                    mode=SelectSelectorMode.DROPDOWN,
-                )
-            ),
-            vol.Optional(
-                CONF_WEB_SEARCH_USER_LOCATION,
-                description={"suggested_value": options.get(CONF_WEB_SEARCH_USER_LOCATION)},
-                default=RECOMMENDED_WEB_SEARCH_USER_LOCATION,
-            ): bool,
-            # Extended component settings
-            vol.Optional(
-                CONF_MAX_FUNCTION_CALLS_PER_CONVERSATION,
-                description={"suggested_value": options.get(CONF_MAX_FUNCTION_CALLS_PER_CONVERSATION)},
-                default=DEFAULT_MAX_FUNCTION_CALLS_PER_CONVERSATION,
-            ): int,
-            vol.Optional(
-                CONF_FUNCTIONS,
-                description={"suggested_value": options.get(CONF_FUNCTIONS)},
-                default=DEFAULT_CONF_FUNCTIONS_STR,
-            ): TemplateSelector(),
-            vol.Optional(
-                CONF_ATTACH_USERNAME,
-                description={"suggested_value": options.get(CONF_ATTACH_USERNAME)},
-                default=DEFAULT_ATTACH_USERNAME,
-            ): BooleanSelector(),
-            vol.Optional(
-                CONF_CONTEXT_THRESHOLD,
-                description={"suggested_value": options.get(CONF_CONTEXT_THRESHOLD)},
-                default=DEFAULT_CONTEXT_THRESHOLD,
-            ): int,
-            vol.Optional(
-                CONF_CONTEXT_TRUNCATE_STRATEGY,
-                description={"suggested_value": options.get(CONF_CONTEXT_TRUNCATE_STRATEGY)},
-                default=DEFAULT_CONTEXT_TRUNCATE_STRATEGY,
-            ): SelectSelector(
-                SelectSelectorConfig(
-                    options=[
-                        SelectOptionDict(value=strategy["key"], label=strategy["label"])
-                        for strategy in CONTEXT_TRUNCATE_STRATEGIES
-                    ],
-                    mode=SelectSelectorMode.DROPDOWN,
-                )
-            ),
-        }
-    )
-    return schema

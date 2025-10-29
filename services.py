@@ -25,14 +25,13 @@ from openai.types.images_response import ImagesResponse
 from openai.types.responses import (
     EasyInputMessageParam,
     Response,
-    ResponseInputFileParam,
-    ResponseInputImageParam,
     ResponseInputMessageContentListParam,
     ResponseInputParam,
     ResponseInputTextParam,
 )
 
 from .const import (
+    CONF_BASE_URL,
     CONF_CHAT_MODEL,
     CONF_FILENAMES,
     CONF_MAX_TOKENS,
@@ -48,7 +47,8 @@ from .const import (
     RECOMMENDED_TOP_P,
     SERVICE_QUERY_IMAGE,
 )
-from .helpers import is_azure, log_openai_request, log_openai_response
+from .entity import async_prepare_files_for_prompt
+from .helpers import is_azure
 
 SERVICE_GENERATE_IMAGE = "generate_image"
 SERVICE_GENERATE_CONTENT = "generate_content"
@@ -123,29 +123,26 @@ async def async_setup_services(hass: HomeAssistant, config: ConfigType) -> None:
                 translation_placeholders={"config_entry": entry_id},
             )
 
-        client = entry.runtime_data
+        client: openai.AsyncClient = entry.runtime_data
 
         try:
-            if is_azure(entry.options.get("base_url", "")):
+            if is_azure(entry.data.get(CONF_BASE_URL, "")):
                 raise HomeAssistantError("DALL-E image generation not supported with Azure OpenAI")
 
-            request_params = {
-                "model": "dall-e-3",
-                "prompt": call.data[CONF_PROMPT],
-                "size": call.data["size"],
-                "quality": call.data["quality"],
-                "style": call.data["style"],
-                "response_format": "url",
-                "n": 1,
-            }
-
-            log_openai_request("images.generate", **request_params)
-
-            response: ImagesResponse = await client.images.generate(**request_params)
-
-            log_openai_response("images.generate", response)
+            response: ImagesResponse = await client.images.generate(
+                model="dall-e-3",
+                prompt=call.data[CONF_PROMPT],
+                size=call.data["size"],
+                quality=call.data["quality"],
+                style=call.data["style"],
+                response_format="url",
+                n=1,
+            )
         except openai.OpenAIError as err:
             raise HomeAssistantError(f"Error generating image: {err}") from err
+
+        if not response.data or not response.data[0].url:
+            raise HomeAssistantError("No image returned")
 
         return response.data[0].model_dump(exclude={"b64_json"})
 
@@ -161,78 +158,66 @@ async def async_setup_services(hass: HomeAssistant, config: ConfigType) -> None:
                 translation_placeholders={"config_entry": entry_id},
             )
 
-        model: str = entry.options.get(CONF_CHAT_MODEL, RECOMMENDED_CHAT_MODEL)
-        client = entry.runtime_data
+        conversation_subentry = None
+        for subentry in entry.subentries.values():
+            if subentry.subentry_type == "conversation":
+                conversation_subentry = subentry
+                break
+
+        if conversation_subentry:
+            model: str = conversation_subentry.data.get(CONF_CHAT_MODEL, RECOMMENDED_CHAT_MODEL)
+            max_tokens: int = conversation_subentry.data.get(CONF_MAX_TOKENS, RECOMMENDED_MAX_TOKENS)
+            top_p: float = conversation_subentry.data.get(CONF_TOP_P, RECOMMENDED_TOP_P)
+            temperature: float = conversation_subentry.data.get(CONF_TEMPERATURE, RECOMMENDED_TEMPERATURE)
+            reasoning_effort: str = conversation_subentry.data.get(CONF_REASONING_EFFORT, RECOMMENDED_REASONING_EFFORT)
+        else:
+            model = RECOMMENDED_CHAT_MODEL
+            max_tokens = RECOMMENDED_MAX_TOKENS
+            top_p = RECOMMENDED_TOP_P
+            temperature = RECOMMENDED_TEMPERATURE
+            reasoning_effort = RECOMMENDED_REASONING_EFFORT
+
+        client: openai.AsyncClient = entry.runtime_data
 
         content: ResponseInputMessageContentListParam = [
             ResponseInputTextParam(type="input_text", text=call.data[CONF_PROMPT])
         ]
 
-        def append_files_to_content() -> None:
-            for filename in call.data[CONF_FILENAMES]:
+        if filenames := call.data.get(CONF_FILENAMES):
+            for filename in filenames:
                 if not hass.config.is_allowed_path(filename):
                     raise HomeAssistantError(
                         f"Cannot read `{filename}`, no access to path; "
                         "`allowlist_external_dirs` may need to be adjusted in "
                         "`configuration.yaml`"
                     )
-                if not Path(filename).exists():
-                    raise HomeAssistantError(f"`{filename}` does not exist")
-                mime_type, base64_file = encode_file(filename)
-                if "image/" in mime_type:
-                    content.append(
-                        ResponseInputImageParam(
-                            type="input_image",
-                            file_id=filename,
-                            image_url=f"data:{mime_type};base64,{base64_file}",
-                            detail="auto",
-                        )
-                    )
-                elif "application/pdf" in mime_type:
-                    content.append(
-                        ResponseInputFileParam(
-                            type="input_file",
-                            filename=filename,
-                            file_data=f"data:{mime_type};base64,{base64_file}",
-                        )
-                    )
-                else:
-                    raise HomeAssistantError(
-                        "Only images and PDF are supported by the OpenAI API,"
-                        f"`{filename}` is not an image file or PDF"
-                    )
 
-        if CONF_FILENAMES in call.data:
-            await hass.async_add_executor_job(append_files_to_content)
+            content.extend(
+                await async_prepare_files_for_prompt(hass, [(Path(filename), None) for filename in filenames])
+            )
 
         messages: ResponseInputParam = [EasyInputMessageParam(type="message", role="user", content=content)]
 
+        model_args = {
+            "model": model,
+            "input": messages,
+            "max_output_tokens": max_tokens,
+            "top_p": top_p,
+            "temperature": temperature,
+            "user": call.context.user_id,
+            "store": False,
+        }
+
+        if model.startswith("o"):
+            model_args["reasoning"] = {"effort": reasoning_effort}
+
+        if is_azure(entry.data.get(CONF_BASE_URL, "")):
+            deployment = model
+            model_args.pop("model")
+            model_args["deployment"] = deployment
+
         try:
-            model_args = {
-                "model": model,
-                "input": messages,
-                "max_output_tokens": entry.options.get(CONF_MAX_TOKENS, RECOMMENDED_MAX_TOKENS),
-                "top_p": entry.options.get(CONF_TOP_P, RECOMMENDED_TOP_P),
-                "temperature": entry.options.get(CONF_TEMPERATURE, RECOMMENDED_TEMPERATURE),
-                "user": call.context.user_id,
-                "store": False,
-            }
-
-            if model.startswith("o"):
-                model_args["reasoning"] = {
-                    "effort": entry.options.get(CONF_REASONING_EFFORT, RECOMMENDED_REASONING_EFFORT)
-                }
-
-            if is_azure(entry.options.get("base_url", "")):
-                deployment = model
-                model_args.pop("model")
-                model_args["deployment"] = deployment
-
-            log_openai_request("responses.create", **model_args)
-
             response: Response = await client.responses.create(**model_args)
-
-            log_openai_response("responses.create", response)
 
         except openai.OpenAIError as err:
             raise HomeAssistantError(f"Error generating content: {err}") from err
@@ -272,18 +257,14 @@ async def async_setup_services(hass: HomeAssistant, config: ConfigType) -> None:
                 "messages": messages,
                 "max_tokens": call.data["max_tokens"],
             }
-            if is_azure(entry.options.get("base_url", "")):
+            if is_azure(entry.data.get(CONF_BASE_URL, "")):
                 request_params = {
-                    "deployment_id": model,  # Azure uses deployment_id instead of model
+                    "deployment_id": model,
                     "messages": messages,
                     "max_tokens": call.data["max_tokens"],
                 }
 
-            log_openai_request("chat.completions.create", **request_params)
-
             response = await client.chat.completions.create(**request_params)
-
-            log_openai_response("chat.completions.create", response)
 
             response_dict = response.model_dump()
         except OpenAIError as err:
