@@ -24,6 +24,7 @@ from .const import (
     LOGGER,
     RECOMMENDED_AI_TASK_OPTIONS,
 )
+from .api import async_setup_api
 from .helpers import is_azure
 from .services import async_setup_services
 
@@ -80,6 +81,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: OmniConvConfigEntry) -> 
     entry.runtime_data = client
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+
+    await async_setup_api(hass, entry)
 
     entry.async_on_unload(entry.add_update_listener(async_update_options))
 

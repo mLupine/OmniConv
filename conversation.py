@@ -48,25 +48,25 @@ class CustomFunctionTool(llm.Tool):
         try:
             function_executor = get_function_executor(self.function_impl["type"])
 
-            exposed_entities = []
-            states = [
-                state
-                for state in hass.states.async_all()
+            all_states = hass.states.async_all()
+            exposed_entity_ids = {
+                state.entity_id
+                for state in all_states
                 if async_should_expose(hass, conversation.DOMAIN, state.entity_id)
-            ]
+            }
+
+            exposed_states = [state for state in all_states if state.entity_id in exposed_entity_ids]
+
             entity_registry = er.async_get(hass)
-            for state in states:
-                entity_id = state.entity_id
-                entity = entity_registry.async_get(entity_id)
-                aliases = []
-                if entity and entity.aliases:
-                    aliases = entity.aliases
+            exposed_entities = []
+            for state in exposed_states:
+                entity = entity_registry.async_get(state.entity_id)
                 exposed_entities.append(
                     {
-                        "entity_id": entity_id,
+                        "entity_id": state.entity_id,
                         "name": state.name,
-                        "state": hass.states.get(entity_id).state,
-                        "aliases": aliases,
+                        "state": state.state,
+                        "aliases": entity.aliases if entity and entity.aliases else [],
                     }
                 )
 
@@ -129,6 +129,8 @@ class OmniConvEntity(
         super().__init__(entry, subentry)
         if self.subentry.data.get(CONF_LLM_HASS_API):
             self._attr_supported_features = conversation.ConversationEntityFeature.CONTROL
+        self._cached_tools: list[CustomFunctionTool] | None = None
+        self._cached_yaml_hash: int | None = None
 
     def _get_custom_functions_as_tools(self) -> list[CustomFunctionTool]:
         """Get custom functions from configuration as Tools."""
@@ -136,9 +138,17 @@ class OmniConvEntity(
 
         try:
             function_yaml = self.subentry.data.get(CONF_FUNCTIONS)
+            yaml_hash = hash(function_yaml) if function_yaml else 0
+
+            if self._cached_tools is not None and self._cached_yaml_hash == yaml_hash:
+                LOGGER.debug("Using cached function tools (%s tools)", len(self._cached_tools))
+                return self._cached_tools
+
             functions = yaml.safe_load(function_yaml) if function_yaml else DEFAULT_CONF_FUNCTIONS
 
             if not functions:
+                self._cached_tools = []
+                self._cached_yaml_hash = yaml_hash
                 return []
 
             tools = []
@@ -150,6 +160,8 @@ class OmniConvEntity(
                     )
                 )
 
+            self._cached_tools = tools
+            self._cached_yaml_hash = yaml_hash
             LOGGER.info("Created %s custom function tools", len(tools))
             return tools
 
@@ -169,6 +181,8 @@ class OmniConvEntity(
         """When entity is added to Home Assistant."""
         await super().async_added_to_hass()
         conversation.async_set_agent(self.hass, self.entry, self)
+        self._cached_tools = self._get_custom_functions_as_tools()
+        LOGGER.debug("Pre-parsed %s custom function tools", len(self._cached_tools))
 
     async def async_will_remove_from_hass(self) -> None:
         """When entity will be removed from Home Assistant."""
@@ -193,10 +207,9 @@ class OmniConvEntity(
         except conversation.ConverseError as err:
             return err.as_conversation_result()
 
-        custom_function_tools = self._get_custom_functions_as_tools()
+        custom_function_tools = self._cached_tools or self._get_custom_functions_as_tools()
         if custom_function_tools and chat_log.llm_api:
-            for tool in custom_function_tools:
-                chat_log.llm_api.tools.append(tool)
+            chat_log.llm_api.tools.extend(custom_function_tools)
 
         await self._async_handle_chat_log(chat_log)
 

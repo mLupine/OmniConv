@@ -405,6 +405,7 @@ class OmniConvBaseLLMEntity(Entity):
             model=subentry.data.get(CONF_CHAT_MODEL, RECOMMENDED_CHAT_MODEL),
             entry_type=dr.DeviceEntryType.SERVICE,
         )
+        self._cached_formatted_tools: list[ToolParam] | None = None
 
     async def _async_handle_chat_log(
         self,
@@ -445,7 +446,12 @@ class OmniConvBaseLLMEntity(Entity):
 
         tools: list[ToolParam] = []
         if chat_log.llm_api:
-            tools = [_format_tool(tool, chat_log.llm_api.custom_serializer) for tool in chat_log.llm_api.tools]
+            if self._cached_formatted_tools is None:
+                self._cached_formatted_tools = [
+                    _format_tool(tool, chat_log.llm_api.custom_serializer) for tool in chat_log.llm_api.tools
+                ]
+                LOGGER.debug("Cached formatted tools (%s tools)", len(self._cached_formatted_tools))
+            tools = self._cached_formatted_tools.copy()
 
         if options.get(CONF_WEB_SEARCH):
             web_search = WebSearchToolParam(
