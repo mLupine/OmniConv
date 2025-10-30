@@ -80,7 +80,7 @@ class FlexAssistAPI(AssistAPI):
         """Return a list of LLM tools."""
 
         tools = super()._async_get_tools(llm_context, exposed_entities)
-        return [tool for tool in tools if not isinstance(tool, Tool) and not tool.name == "get_home_state"]
+        return [tool for tool in tools if isinstance(tool, Tool) and tool.name != "get_home_state"]
 
     async def async_get_api_instance(self, llm_context: LLMContext) -> llm.APIInstance:
         """Get an API instance with cached entity data."""

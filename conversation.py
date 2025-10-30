@@ -195,9 +195,19 @@ class OmniConvEntity(
         chat_log: conversation.ChatLog,
     ) -> conversation.ConversationResult:
         """Process the user input and call the API."""
+        import time
+
         from .api import LLM_API_FLEX_ASSIST
+        from .const import CONF_PERFORMANCE_TRACING, LOGGER
 
         options = self.subentry.data
+        perf_enabled = options.get(CONF_PERFORMANCE_TRACING, False)
+
+        if perf_enabled:
+            start_time = time.time()
+            LOGGER.info("=" * 80)
+            LOGGER.info("CONVERSATION START")
+            LOGGER.info("=" * 80)
 
         # Force usage of the FlexAssistAPI
         flex_api_id = f"{LLM_API_FLEX_ASSIST}_{self.entry.entry_id}"
@@ -209,12 +219,20 @@ class OmniConvEntity(
                 options.get(CONF_PROMPT),
                 user_input.extra_system_prompt,
             )
+            if perf_enabled:
+                elapsed = time.time() - start_time
+                LOGGER.info("⏱️  async_provide_llm_data: %.3fs", elapsed)
+                start_time = time.time()
         except conversation.ConverseError as err:
             return err.as_conversation_result()
 
         custom_function_tools = self._cached_tools or self._get_custom_functions_as_tools()
         if custom_function_tools and chat_log.llm_api:
             chat_log.llm_api.tools.extend(custom_function_tools)
+            if perf_enabled:
+                elapsed = time.time() - start_time
+                LOGGER.info("⏱️  Load and extend custom function tools: %.3fs", elapsed)
+                start_time = time.time()
 
         await self._async_handle_chat_log(chat_log)
 

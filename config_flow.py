@@ -55,6 +55,7 @@ from .const import (
     CONF_MAX_FUNCTION_CALLS_PER_CONVERSATION,
     CONF_MAX_TOKENS,
     CONF_ORGANIZATION,
+    CONF_PERFORMANCE_TRACING,
     CONF_PROMPT,
     CONF_REASONING_EFFORT,
     CONF_RECOMMENDED,
@@ -264,6 +265,7 @@ class OmniConvSubentryFlowHandler(ConfigSubentryFlow):
             )
 
         step_schema[vol.Required(CONF_RECOMMENDED, default=options.get(CONF_RECOMMENDED, False))] = bool
+        step_schema[vol.Optional(CONF_PERFORMANCE_TRACING, default=options.get(CONF_PERFORMANCE_TRACING, False))] = bool
 
         if user_input is not None:
             if not user_input.get(CONF_LLM_HASS_API):

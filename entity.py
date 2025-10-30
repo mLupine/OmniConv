@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import json
+import time
 from collections.abc import AsyncGenerator, Callable
 from mimetypes import guess_file_type
 from pathlib import Path
@@ -71,6 +72,7 @@ from .const import (
     CONF_CODE_INTERPRETER,
     CONF_IMAGE_MODEL,
     CONF_MAX_TOKENS,
+    CONF_PERFORMANCE_TRACING,
     CONF_REASONING_EFFORT,
     CONF_TEMPERATURE,
     CONF_TOP_P,
@@ -100,6 +102,45 @@ if TYPE_CHECKING:
     from . import OmniConvConfigEntry
 
 MAX_TOOL_ITERATIONS = 10
+
+
+class PerformanceTracker:
+    """Track performance metrics for conversation processing."""
+
+    def __init__(self, enabled: bool = False):
+        """Initialize performance tracker."""
+        self.enabled = enabled
+        self.start_time = time.time()
+        self.checkpoints: list[tuple[str, float]] = []
+        self.last_checkpoint = self.start_time
+
+    def checkpoint(self, name: str) -> None:
+        """Record a checkpoint with elapsed time since last checkpoint."""
+        if not self.enabled:
+            return
+
+        current_time = time.time()
+        elapsed = current_time - self.last_checkpoint
+        self.checkpoints.append((name, elapsed))
+        self.last_checkpoint = current_time
+
+        LOGGER.info("⏱️  %s: %.3fs", name, elapsed)
+
+    def summary(self) -> None:
+        """Log a summary of all checkpoints."""
+        if not self.enabled or not self.checkpoints:
+            return
+
+        total_time = time.time() - self.start_time
+        LOGGER.info("=" * 80)
+        LOGGER.info("PERFORMANCE SUMMARY - Total: %.3fs", total_time)
+        LOGGER.info("=" * 80)
+
+        for name, elapsed in self.checkpoints:
+            percentage = (elapsed / total_time) * 100 if total_time > 0 else 0
+            LOGGER.info("  %s: %.3fs (%.1f%%)", name, elapsed, percentage)
+
+        LOGGER.info("=" * 80)
 
 
 def _adjust_schema(schema: dict[str, Any]) -> None:
@@ -485,7 +526,12 @@ class OmniConvBaseLLMEntity(Entity):
         """Generate an answer for the chat log."""
         options = self.subentry.data
 
+        # Initialize performance tracker
+        perf = PerformanceTracker(enabled=options.get(CONF_PERFORMANCE_TRACING, False))
+        perf.checkpoint("Start _async_handle_chat_log")
+
         messages = _convert_content_to_param(chat_log.content)
+        perf.checkpoint("Convert chat content to OpenAI format")
 
         model_args = ResponseCreateParamsStreaming(
             model=options.get(CONF_CHAT_MODEL, RECOMMENDED_CHAT_MODEL),
@@ -512,6 +558,8 @@ class OmniConvBaseLLMEntity(Entity):
         if model_args["model"].startswith("gpt-5"):
             model_args["text"] = {"verbosity": options.get(CONF_VERBOSITY, RECOMMENDED_VERBOSITY)}
 
+        perf.checkpoint("Build model args")
+
         tools: list[ToolParam] = []
         if chat_log.llm_api:
             # Create hash of tool signatures to detect changes
@@ -526,6 +574,8 @@ class OmniConvBaseLLMEntity(Entity):
                 LOGGER.debug("Formatted and cached %s tools", len(self._cached_formatted_tools))
 
             tools = self._cached_formatted_tools  # No need to copy, tools aren't mutated
+
+        perf.checkpoint(f"Format tools ({len(tools)} tools)")
 
         if options.get(CONF_WEB_SEARCH):
             web_search = WebSearchToolParam(
@@ -569,6 +619,8 @@ class OmniConvBaseLLMEntity(Entity):
         if tools:
             model_args["tools"] = tools
 
+        perf.checkpoint("Setup web search & code interpreter tools")
+
         last_content = chat_log.content[-1]
 
         if last_content.role == "user" and last_content.attachments:
@@ -576,6 +628,7 @@ class OmniConvBaseLLMEntity(Entity):
                 self.hass,
                 [(a.path, a.mime_type) for a in last_content.attachments],
             )
+            perf.checkpoint(f"Process attachments ({len(files)} files)")
             last_message = messages[-1]
             assert (
                 last_message["type"] == "message"
@@ -598,7 +651,11 @@ class OmniConvBaseLLMEntity(Entity):
 
         client = self.entry.runtime_data
 
+        perf.checkpoint("Prepare API request")
+
         for _iteration in range(MAX_TOOL_ITERATIONS):
+            perf.checkpoint(f"Start iteration {_iteration + 1}/{MAX_TOOL_ITERATIONS}")
+
             try:
                 if self._is_azure:
                     deployment = model_args["model"]
@@ -608,6 +665,8 @@ class OmniConvBaseLLMEntity(Entity):
                     stream = await client.responses.create(**model_args_azure)
                 else:
                     stream = await client.responses.create(**model_args)
+
+                perf.checkpoint("OpenAI API call completed, start streaming")
 
                 messages.extend(
                     _convert_content_to_param(
@@ -619,6 +678,8 @@ class OmniConvBaseLLMEntity(Entity):
                         ]
                     )
                 )
+
+                perf.checkpoint("Streaming & content conversion completed")
             except openai.RateLimitError as err:
                 LOGGER.error("Rate limited by OpenAI: %s", err)
                 raise HomeAssistantError("Rate limited or insufficient funds") from err
@@ -645,7 +706,10 @@ class OmniConvBaseLLMEntity(Entity):
                 raise HomeAssistantError("Error talking to OpenAI") from err
 
             if not chat_log.unresponded_tool_results:
+                perf.checkpoint("No more tool calls, conversation complete")
                 break
+
+        perf.summary()
 
 
 async def async_prepare_files_for_prompt(

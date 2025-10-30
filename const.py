@@ -46,6 +46,7 @@ CONF_FUNCTIONS = "functions"
 CONF_ATTACH_USERNAME = "attach_username"
 CONF_CONTEXT_THRESHOLD = "context_threshold"
 CONF_CONTEXT_TRUNCATE_STRATEGY = "context_truncate_strategy"
+CONF_PERFORMANCE_TRACING = "performance_tracing"
 
 DEFAULT_CHAT_MODEL = "gpt-4o-mini"
 DEFAULT_MAX_TOKENS = 150
