@@ -54,7 +54,7 @@ class FlexAssistAPI(AssistAPI):
             return []
 
         entity_ids = sorted(exposed_entities.get("entities", {}).keys())
-        cache_key = f"{llm_context.device_id}:{hash(tuple(entity_ids))}"
+        cache_key = f"{llm_context.device_id or 'default'}:{hash(tuple(entity_ids))}"
 
         cached = self._entities_cache.get(cache_key)
         if cached:
@@ -81,6 +81,38 @@ class FlexAssistAPI(AssistAPI):
 
         tools = super()._async_get_tools(llm_context, exposed_entities)
         return [tool for tool in tools if not isinstance(tool, Tool) and not tool.name == "get_home_state"]
+
+    async def async_get_api_instance(self, llm_context: LLMContext) -> llm.APIInstance:
+        """Get an API instance with cached entity data."""
+        from homeassistant.helpers.llm import APIInstance, _get_exposed_entities, selector_serializer
+
+        # Get exposed entities with domain info (required by parent class)
+        if llm_context.assistant:
+            exposed_entities: dict | None = _get_exposed_entities(self.hass, llm_context.assistant, include_state=True)
+        else:
+            exposed_entities = None
+
+        # Create cache key for prompt caching
+        if exposed_entities and exposed_entities.get("entities"):
+            entity_ids = sorted(exposed_entities.get("entities", {}).keys())
+            cache_key = f"{llm_context.device_id or 'default'}:{hash(tuple(entity_ids))}"
+
+            # Check if we have cached entities prompt
+            cached = self._entities_cache.get(cache_key)
+            if cached:
+                timestamp, _ = cached
+                _LOGGER.debug("Using cached entities for API instance (age: %.1fs)", time.time() - timestamp)
+            else:
+                # Cache miss - will be populated by background refresh
+                _LOGGER.debug("Cache miss for API instance, will use background cache on next request")
+
+        return APIInstance(
+            api=self,
+            api_prompt=self._async_get_api_prompt(llm_context, exposed_entities),
+            llm_context=llm_context,
+            tools=self._async_get_tools(llm_context, exposed_entities),
+            custom_serializer=selector_serializer,
+        )
 
     async def start_background_refresh(self) -> None:
         """Start background task to refresh entities cache."""
@@ -162,9 +194,20 @@ class FlexAssistAPI(AssistAPI):
             _LOGGER.error("Error rendering entities prompt template: %s", err)
             return
 
-        cache_key = f"None:{hash(tuple(sorted(state.entity_id for state in exposed_states)))}"
+        # Generate cache keys for common device scenarios
+        entity_ids = sorted([state.entity_id for state in exposed_states])
+        entity_hash = hash(tuple(entity_ids))
+
+        # Cache for both default and None device_id (covers most cases)
+        cache_keys = [
+            f"default:{entity_hash}",
+            f"None:{entity_hash}",
+        ]
+
         async with self._cache_lock:
-            self._entities_cache[cache_key] = (time.time(), rendered_prompt)
+            current_time = time.time()
+            for cache_key in cache_keys:
+                self._entities_cache[cache_key] = (current_time, rendered_prompt)
 
             if len(self._entities_cache) > 10:
                 sorted_keys = sorted(self._entities_cache.keys(), key=lambda k: self._entities_cache[k][0])

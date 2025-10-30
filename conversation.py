@@ -195,12 +195,17 @@ class OmniConvEntity(
         chat_log: conversation.ChatLog,
     ) -> conversation.ConversationResult:
         """Process the user input and call the API."""
+        from .api import LLM_API_FLEX_ASSIST
+
         options = self.subentry.data
+
+        # Force usage of the FlexAssistAPI
+        flex_api_id = f"{LLM_API_FLEX_ASSIST}_{self.entry.entry_id}"
 
         try:
             await chat_log.async_provide_llm_data(
                 user_input.as_llm_context(DOMAIN),
-                options.get(CONF_LLM_HASS_API),
+                flex_api_id,
                 options.get(CONF_PROMPT),
                 user_input.extra_system_prompt,
             )

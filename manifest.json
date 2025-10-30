@@ -1,28 +1,14 @@
 {
   "domain": "omniconv",
   "name": "OmniConv",
-  "after_dependencies": [
-    "assist_pipeline",
-    "intent"
-  ],
-  "codeowners": [
-    "@mLupine"
-  ],
+  "after_dependencies": ["assist_pipeline", "intent"],
+  "codeowners": ["@mLupine"],
   "config_flow": true,
-  "dependencies": [
-    "conversation",
-    "energy",
-    "history",
-    "recorder",
-    "rest",
-    "scrape"
-  ],
+  "dependencies": ["conversation", "energy", "history", "recorder", "rest", "scrape"],
   "documentation": "https://github.com/mLupine/OmniConv",
   "integration_type": "service",
   "iot_class": "cloud_polling",
   "issue_tracker": "https://github.com/mLupine/OmniConv/issues",
-  "requirements": [
-    "openai==2.2.0"
-  ],
+  "requirements": ["openai>=2.2.0", "orjson>=3.10.12"],
   "version": "2.0.0dev0"
 }

@@ -9,6 +9,8 @@ from mimetypes import guess_file_type
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, cast
 
+import orjson
+
 import openai
 from homeassistant.components import conversation
 from homeassistant.config_entries import ConfigSubentry
@@ -136,6 +138,116 @@ def _format_structured_output(schema: vol.Schema, llm_api: llm.APIInstance | Non
     return result
 
 
+def _serialize_json(obj: Any) -> str:
+    """Serialize object to JSON using orjson for better performance."""
+    return orjson.dumps(obj).decode("utf-8")
+
+
+# Cache for content conversion
+_content_conversion_cache: dict[int, tuple[list, list[str], dict]] = {}
+
+
+def _convert_single_content(
+    content: conversation.Content,
+    web_search_calls: dict[str, ResponseFunctionWebSearchParam],
+    reasoning_summary: list[str],
+) -> tuple[list, list[str], dict[str, ResponseFunctionWebSearchParam]]:
+    """Convert a single content item to OpenAI format.
+
+    Returns: (messages, reasoning_summary_updates, web_search_calls_updates)
+    """
+    # Create a cache key based on content identity
+    cache_key = id(content)
+
+    # Check cache
+    if cache_key in _content_conversion_cache:
+        return _content_conversion_cache[cache_key]
+
+    messages = []
+    reasoning_updates = []
+    web_search_updates = {}
+
+    if isinstance(content, conversation.ToolResultContent):
+        if content.tool_name == "web_search_call" and content.tool_call_id in web_search_calls:
+            web_search_call = web_search_calls[content.tool_call_id].copy()
+            web_search_call["status"] = content.tool_result.get("status", "completed")
+            messages.append(web_search_call)
+            # Mark for removal
+            web_search_updates[content.tool_call_id] = None
+        else:
+            messages.append(
+                FunctionCallOutput(
+                    type="function_call_output",
+                    call_id=content.tool_call_id,
+                    output=_serialize_json(content.tool_result),
+                )
+            )
+    elif content.content:
+        role: Literal["user", "assistant", "system", "developer"] = content.role
+        if role == "system":
+            role = "developer"
+        messages.append(EasyInputMessageParam(type="message", role=role, content=content.content))
+
+    if isinstance(content, conversation.AssistantContent):
+        if content.tool_calls:
+            for tool_call in content.tool_calls:
+                if tool_call.external and tool_call.tool_name == "web_search_call" and "action" in tool_call.tool_args:
+                    web_search_updates[tool_call.id] = ResponseFunctionWebSearchParam(
+                        type="web_search_call",
+                        id=tool_call.id,
+                        action=tool_call.tool_args["action"],
+                        status="completed",
+                    )
+                else:
+                    messages.append(
+                        ResponseFunctionToolCallParam(
+                            type="function_call",
+                            name=tool_call.tool_name,
+                            arguments=_serialize_json(tool_call.tool_args),
+                            call_id=tool_call.id,
+                        )
+                    )
+
+        if content.thinking_content:
+            reasoning_updates.append(content.thinking_content)
+
+        if isinstance(content.native, ResponseReasoningItem):
+            messages.append(
+                ResponseReasoningItemParam(
+                    type="reasoning",
+                    id=content.native.id,
+                    summary=(
+                        [
+                            {
+                                "type": "summary_text",
+                                "text": summary,
+                            }
+                            for summary in reasoning_summary + reasoning_updates
+                        ]
+                        if content.thinking_content
+                        else []
+                    ),
+                    encrypted_content=content.native.encrypted_content,
+                )
+            )
+            reasoning_updates = []  # Clear after using
+        elif isinstance(content.native, ImageGenerationCall):
+            messages.append(cast(ImageGenerationCallParam, content.native.to_dict()))
+
+    # Cache the result
+    result = (messages, reasoning_updates, web_search_updates)
+    _content_conversion_cache[cache_key] = result
+
+    # Limit cache size
+    if len(_content_conversion_cache) > 100:
+        # Remove oldest entries
+        keys_to_remove = list(_content_conversion_cache.keys())[:20]
+        for key in keys_to_remove:
+            del _content_conversion_cache[key]
+
+    return result
+
+
 def _format_tool(tool: llm.Tool, custom_serializer: Callable[[Any], Any] | None) -> FunctionToolParam:
     """Format tool specification."""
     return FunctionToolParam(
@@ -156,76 +268,30 @@ def _convert_content_to_param(
     web_search_calls: dict[str, ResponseFunctionWebSearchParam] = {}
 
     for content in chat_content:
-        if isinstance(content, conversation.ToolResultContent):
-            if content.tool_name == "web_search_call" and content.tool_call_id in web_search_calls:
-                web_search_call = web_search_calls.pop(content.tool_call_id)
-                web_search_call["status"] = content.tool_result.get("status", "completed")
-                messages.append(web_search_call)
-            else:
-                messages.append(
-                    FunctionCallOutput(
-                        type="function_call_output",
-                        call_id=content.tool_call_id,
-                        output=json.dumps(content.tool_result),
-                    )
-                )
-            continue
+        # Use cached conversion
+        content_messages, reasoning_updates, web_search_updates = _convert_single_content(
+            content, web_search_calls, reasoning_summary
+        )
 
-        if content.content:
-            role: Literal["user", "assistant", "system", "developer"] = content.role
-            if role == "system":
-                role = "developer"
-            messages.append(EasyInputMessageParam(type="message", role=role, content=content.content))
+        # Apply updates
+        messages.extend(content_messages)
 
-        if isinstance(content, conversation.AssistantContent):
-            if content.tool_calls:
-                for tool_call in content.tool_calls:
-                    if (
-                        tool_call.external
-                        and tool_call.tool_name == "web_search_call"
-                        and "action" in tool_call.tool_args
-                    ):
-                        web_search_calls[tool_call.id] = ResponseFunctionWebSearchParam(
-                            type="web_search_call",
-                            id=tool_call.id,
-                            action=tool_call.tool_args["action"],
-                            status="completed",
-                        )
-                    else:
-                        messages.append(
-                            ResponseFunctionToolCallParam(
-                                type="function_call",
-                                name=tool_call.tool_name,
-                                arguments=json.dumps(tool_call.tool_args),
-                                call_id=tool_call.id,
-                            )
-                        )
-
-            if content.thinking_content:
-                reasoning_summary.append(content.thinking_content)
-
-            if isinstance(content.native, ResponseReasoningItem):
-                messages.append(
-                    ResponseReasoningItemParam(
-                        type="reasoning",
-                        id=content.native.id,
-                        summary=(
-                            [
-                                {
-                                    "type": "summary_text",
-                                    "text": summary,
-                                }
-                                for summary in reasoning_summary
-                            ]
-                            if content.thinking_content
-                            else []
-                        ),
-                        encrypted_content=content.native.encrypted_content,
-                    )
-                )
+        # Update reasoning summary
+        if reasoning_updates:
+            if isinstance(content, conversation.AssistantContent) and isinstance(content.native, ResponseReasoningItem):
+                # Clear after using in reasoning item
                 reasoning_summary = []
-            elif isinstance(content.native, ImageGenerationCall):
-                messages.append(cast(ImageGenerationCallParam, content.native.to_dict()))
+            else:
+                reasoning_summary.extend(reasoning_updates)
+
+        # Update web search calls
+        for call_id, call in web_search_updates.items():
+            if call is None:
+                # Remove the call
+                web_search_calls.pop(call_id, None)
+            else:
+                # Add or update the call
+                web_search_calls[call_id] = call
 
     return messages
 
@@ -398,6 +464,7 @@ class OmniConvBaseLLMEntity(Entity):
         self.entry = entry
         self.subentry = subentry
         self._attr_unique_id = subentry.subentry_id
+        self._is_azure = is_azure(entry.data.get("base_url", ""))  # Cache Azure detection
         self._attr_device_info = dr.DeviceInfo(
             identifiers={(DOMAIN, subentry.subentry_id)},
             name=subentry.title,
@@ -406,6 +473,7 @@ class OmniConvBaseLLMEntity(Entity):
             entry_type=dr.DeviceEntryType.SERVICE,
         )
         self._cached_formatted_tools: list[ToolParam] | None = None
+        self._cached_tools_hash: int | None = None
 
     async def _async_handle_chat_log(
         self,
@@ -446,12 +514,18 @@ class OmniConvBaseLLMEntity(Entity):
 
         tools: list[ToolParam] = []
         if chat_log.llm_api:
-            if self._cached_formatted_tools is None:
+            # Create hash of tool signatures to detect changes
+            current_tools_hash = hash(tuple((tool.name, type(tool).__name__) for tool in chat_log.llm_api.tools))
+
+            # Check if tools have changed or not cached yet
+            if self._cached_formatted_tools is None or self._cached_tools_hash != current_tools_hash:
                 self._cached_formatted_tools = [
                     _format_tool(tool, chat_log.llm_api.custom_serializer) for tool in chat_log.llm_api.tools
                 ]
-                LOGGER.debug("Cached formatted tools (%s tools)", len(self._cached_formatted_tools))
-            tools = self._cached_formatted_tools.copy()
+                self._cached_tools_hash = current_tools_hash
+                LOGGER.debug("Formatted and cached %s tools", len(self._cached_formatted_tools))
+
+            tools = self._cached_formatted_tools  # No need to copy, tools aren't mutated
 
         if options.get(CONF_WEB_SEARCH):
             web_search = WebSearchToolParam(
@@ -526,7 +600,7 @@ class OmniConvBaseLLMEntity(Entity):
 
         for _iteration in range(MAX_TOOL_ITERATIONS):
             try:
-                if is_azure(self.entry.data.get("base_url", "")):
+                if self._is_azure:
                     deployment = model_args["model"]
                     model_args_azure = model_args.copy()
                     model_args_azure.pop("model")
