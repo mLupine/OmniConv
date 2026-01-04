@@ -40,6 +40,7 @@ CONF_WEB_SEARCH_CITY = "city"
 CONF_WEB_SEARCH_REGION = "region"
 CONF_WEB_SEARCH_COUNTRY = "country"
 CONF_WEB_SEARCH_TIMEZONE = "timezone"
+CONF_WEB_SEARCH_INLINE_CITATIONS = "inline_citations"
 
 CONF_MAX_FUNCTION_CALLS_PER_CONVERSATION = "max_function_calls_per_conversation"
 CONF_FUNCTIONS = "functions"
@@ -73,6 +74,7 @@ RECOMMENDED_TOP_P = 1.0
 RECOMMENDED_WEB_SEARCH = False
 RECOMMENDED_WEB_SEARCH_CONTEXT_SIZE = "medium"
 RECOMMENDED_WEB_SEARCH_USER_LOCATION = False
+RECOMMENDED_WEB_SEARCH_INLINE_CITATIONS = False
 RECOMMENDED_CODE_INTERPRETER = False
 RECOMMENDED_VERBOSITY = "medium"
 
@@ -190,4 +192,23 @@ UNSUPPORTED_IMAGE_MODELS: list[str] = [
     "o1",
     "gpt-3.5",
     "gpt-4-turbo",
+]
+
+UNSUPPORTED_CODE_INTERPRETER_MODELS: list[str] = [
+    "gpt-5-pro",
+    "gpt-5.2-pro",
+    "gpt-5-codex",
+    "gpt-5.1-codex",
+    "gpt-5.2-codex",
+]
+
+UNSUPPORTED_EXTENDED_CACHE_RETENTION_MODELS: list[str] = [
+    "o1",
+    "o3",
+    "o4",
+    "gpt-3.5",
+    "gpt-4-turbo",
+    "gpt-4o",
+    "gpt-5-mini",
+    "gpt-5-nano",
 ]

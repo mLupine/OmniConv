@@ -40,7 +40,8 @@
           "reasoning_effort": "Reasoning effort",
           "web_search": "Enable web search",
           "search_context_size": "Web search context size",
-          "user_location": "Use approximate location for better search results"
+          "user_location": "Use approximate location for better search results",
+          "inline_citations": "Include inline source citations in web search responses"
         },
         "data_description": {
           "api_key": "Your OpenAI API key. Get yours from platform.openai.com. Only required if 'Skip API Authentication' is not enabled.",
@@ -62,7 +63,8 @@
           "reasoning_effort": "Adjust the AI's computational effort for reasoning; may affect response quality and latency.",
           "web_search": "Allow the AI to access the internet to answer questions with current information.",
           "search_context_size": "Controls how much information from web search results is provided to the AI. Larger values provide more context but increase costs and response times, while smaller values may limit the AI's understanding of search results.",
-          "user_location": "Allow the AI to use your approximate location for more relevant local results or searches."
+          "user_location": "Allow the AI to use your approximate location for more relevant local results or searches.",
+          "inline_citations": "When enabled, the AI will include inline source citations (e.g., [1](https://example.com)) in responses that use web search. Disable to get cleaner responses without citations."
         }
       }
     }
