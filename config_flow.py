@@ -354,7 +354,7 @@ class OmniConvSubentryFlowHandler(ConfigSubentryFlow):
         elif CONF_CODE_INTERPRETER in options:
             options.pop(CONF_CODE_INTERPRETER)
 
-        if model.startswith(("o", "gpt-5")) and not model.startswith("gpt-5-pro"):
+        if reasoning_options := self._get_reasoning_options(model):
             step_schema.update(
                 {
                     vol.Optional(
@@ -362,11 +362,7 @@ class OmniConvSubentryFlowHandler(ConfigSubentryFlow):
                         default=RECOMMENDED_REASONING_EFFORT,
                     ): SelectSelector(
                         SelectSelectorConfig(
-                            options=(
-                                ["low", "medium", "high"]
-                                if model.startswith("o")
-                                else ["minimal", "low", "medium", "high"]
-                            ),
+                            options=reasoning_options,
                             translation_key=CONF_REASONING_EFFORT,
                             mode=SelectSelectorMode.DROPDOWN,
                         )
@@ -516,6 +512,24 @@ class OmniConvSubentryFlowHandler(ConfigSubentryFlow):
             data_schema=self.add_suggested_values_to_schema(vol.Schema(step_schema), options),
             errors=errors,
         )
+
+    def _get_reasoning_options(self, model: str) -> list[str]:
+        """Get reasoning effort options based on model."""
+        if not model.startswith(("o", "gpt-5")) or model.startswith("gpt-5-pro"):
+            return []
+
+        models_reasoning_map = {
+            "gpt-5.2-pro": ["medium", "high", "xhigh"],
+            "gpt-5.2": ["none", "low", "medium", "high", "xhigh"],
+            "gpt-5.1": ["none", "low", "medium", "high"],
+            "gpt-5": ["minimal", "low", "medium", "high"],
+            "": ["low", "medium", "high"],  # The default case for o-series
+        }
+
+        for prefix, options in models_reasoning_map.items():
+            if model.startswith(prefix):
+                return options
+        return []
 
     async def _get_location_data(self) -> dict[str, str]:
         """Get approximate location data of the user."""

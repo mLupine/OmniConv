@@ -70,9 +70,12 @@
     }
   },
   "reasoning_effort": {
+    "none": "None",
+    "minimal": "Minimal",
     "low": "Low",
     "medium": "Medium",
-    "high": "High"
+    "high": "High",
+    "xhigh": "X-High"
   },
   "search_context_size": {
     "low": "Less context (faster)",
